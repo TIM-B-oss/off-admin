@@ -13,23 +13,21 @@ const db = firebase.firestore();
 
 const ADMIN_PASSWORD = "AdminPanel2025";
 const SERVER_CITY = "spb";
+const THEME_STORAGE_KEY = "siteTheme";
 
 let allAdmins = [];
 let currentEditingAdmin = null;
 
-// ==========================
-// UI
-// ==========================
 const adminPanel = document.getElementById("adminPanel");
 const adminPanelContent = document.getElementById("adminPanelContent");
 const openAdminPanelBtn = document.getElementById("openAdminPanelBtn");
 const closeAdminPanelBtn = document.getElementById("closeAdminPanel");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const themeToggleBtn = document.getElementById("themeToggleBtn");
+const searchInput = document.getElementById("searchInput");
+const serverBadgeBtn = document.getElementById("serverBadgeBtn");
 
-// ==========================
-// HELPERS
-// ==========================
 function showMessage(text, type = "success") {
     const el = document.getElementById("actionMessage");
     if (!el) return;
@@ -41,6 +39,19 @@ function showMessage(text, type = "success") {
     setTimeout(() => {
         el.style.display = "none";
     }, 4000);
+}
+
+function sortAdmins(admins) {
+    return [...admins].sort((a, b) => {
+        const orderA = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
+        const orderB = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
+
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+
+        return (a.nickname || "").localeCompare((b.nickname || ""), "ru");
+    });
 }
 
 function renderAdmins(admins) {
@@ -58,16 +69,16 @@ function renderAdmins(admins) {
         return;
     }
 
-    admins.forEach(admin => {
+    admins.forEach((admin) => {
         const row = document.createElement("tr");
 
         const nicknameCell = document.createElement("td");
-        nicknameCell.textContent = admin.nickname || "-";
         nicknameCell.className = "nickname-cell";
+        nicknameCell.textContent = admin.nickname || "-";
 
         const levelCell = document.createElement("td");
-        levelCell.textContent = admin.level ?? "-";
         levelCell.className = "level-cell";
+        levelCell.textContent = admin.level ?? "-";
 
         const statusCell = document.createElement("td");
         const statusTag = document.createElement("span");
@@ -86,7 +97,7 @@ function renderAdmins(admins) {
             vkCell.appendChild(link);
         } else {
             vkCell.textContent = "—";
-            vkCell.style.color = "#c0cad7";
+            vkCell.className = "muted-cell";
         }
 
         row.appendChild(nicknameCell);
@@ -98,6 +109,17 @@ function renderAdmins(admins) {
     });
 }
 
+function applyTheme(theme) {
+    const finalTheme = theme === "dark" ? "dark" : "light";
+    document.body.setAttribute("data-theme", finalTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, finalTheme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.body.getAttribute("data-theme") || "light";
+    applyTheme(currentTheme === "dark" ? "light" : "dark");
+}
+
 async function loadAdmins() {
     try {
         const snapshot = await db.collection("admins")
@@ -106,19 +128,90 @@ async function loadAdmins() {
 
         allAdmins = [];
 
-        snapshot.forEach(doc => {
+        snapshot.forEach((doc) => {
             allAdmins.push({
                 id: doc.id,
                 ...doc.data()
             });
         });
 
-        allAdmins.sort((a, b) => (Number(b.level) || 0) - (Number(a.level) || 0));
+        allAdmins = sortAdmins(allAdmins);
         renderAdmins(allAdmins);
     } catch (error) {
         console.error("Ошибка загрузки:", error);
         renderAdmins([]);
     }
+}
+
+async function normalizeSortOrders() {
+    const snapshot = await db.collection("admins")
+        .where("city", "==", SERVER_CITY)
+        .get();
+
+    const admins = [];
+    snapshot.forEach((doc) => {
+        admins.push({
+            id: doc.id,
+            ...doc.data()
+        });
+    });
+
+    const sorted = sortAdmins(admins);
+    const batch = db.batch();
+    let changed = false;
+
+    sorted.forEach((admin, index) => {
+        const correctOrder = index + 1;
+        if (Number(admin.sortOrder) !== correctOrder) {
+            batch.update(db.collection("admins").doc(admin.id), {
+                sortOrder: correctOrder
+            });
+            changed = true;
+        }
+    });
+
+    if (changed) {
+        await batch.commit();
+    }
+}
+
+async function moveAdminToPosition(adminId, targetPosition) {
+    const snapshot = await db.collection("admins")
+        .where("city", "==", SERVER_CITY)
+        .get();
+
+    const admins = [];
+    snapshot.forEach((doc) => {
+        admins.push({
+            id: doc.id,
+            ...doc.data()
+        });
+    });
+
+    let sorted = sortAdmins(admins);
+    const currentIndex = sorted.findIndex((admin) => admin.id === adminId);
+
+    if (currentIndex === -1) return;
+
+    const movedAdmin = sorted[currentIndex];
+    sorted.splice(currentIndex, 1);
+
+    let newIndex = targetPosition - 1;
+
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > sorted.length) newIndex = sorted.length;
+
+    sorted.splice(newIndex, 0, movedAdmin);
+
+    const batch = db.batch();
+
+    sorted.forEach((admin, index) => {
+        batch.update(db.collection("admins").doc(admin.id), {
+            sortOrder: index + 1
+        });
+    });
+
+    await batch.commit();
 }
 
 function setLoggedInState() {
@@ -157,9 +250,31 @@ function setLoggedOutState() {
     localStorage.removeItem("adminLoggedIn");
 }
 
-// ==========================
-// OPEN/CLOSE PANEL
-// ==========================
+function filterAdmins() {
+    const value = (searchInput?.value || "").trim().toLowerCase();
+
+    if (!value) {
+        renderAdmins(sortAdmins(allAdmins));
+        return;
+    }
+
+    const filtered = allAdmins.filter((admin) =>
+        (admin.nickname || "").toLowerCase().includes(value)
+    );
+
+    renderAdmins(sortAdmins(filtered));
+}
+
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", toggleTheme);
+}
+
+if (serverBadgeBtn) {
+    serverBadgeBtn.addEventListener("click", () => {
+        showMessage("Сейчас доступен только сервер Санкт-Петербург", "success");
+    });
+}
+
 if (openAdminPanelBtn) {
     openAdminPanelBtn.addEventListener("click", () => {
         adminPanel.style.display = "flex";
@@ -187,9 +302,6 @@ if (adminPanel) {
     });
 }
 
-// ==========================
-// LOGIN / LOGOUT
-// ==========================
 if (loginBtn) {
     loginBtn.addEventListener("click", () => {
         const passwordInput = document.getElementById("adminPassword");
@@ -214,80 +326,90 @@ if (logoutBtn) {
 const adminPasswordInput = document.getElementById("adminPassword");
 if (adminPasswordInput) {
     adminPasswordInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
+        if (e.key === "Enter" && loginBtn) {
             loginBtn.click();
         }
     });
 }
 
-// ==========================
-// SEARCH
-// ==========================
-const searchInput = document.getElementById("searchInput");
 if (searchInput) {
-    searchInput.addEventListener("input", () => {
-        const value = searchInput.value.trim().toLowerCase();
-
-        if (!value) {
-            renderAdmins(allAdmins);
-            return;
-        }
-
-        const filtered = allAdmins.filter(admin =>
-            (admin.nickname || "").toLowerCase().includes(value)
-        );
-
-        renderAdmins(filtered);
-    });
+    searchInput.addEventListener("input", filterAdmins);
 }
 
-// ==========================
-// ADD ADMIN
-// ==========================
 const addAdminBtn = document.getElementById("addAdminBtn");
 if (addAdminBtn) {
     addAdminBtn.addEventListener("click", async () => {
-        console.log("Кнопка добавления нажата");
-
+        const addId = document.getElementById("addId").value.trim();
+        const sortOrderInput = parseInt(document.getElementById("addSortOrder").value, 10);
         const nickname = document.getElementById("addNickname").value.trim();
         const level = parseInt(document.getElementById("addLevel").value, 10);
         const status = document.getElementById("addStatus").value.trim();
         const vk = document.getElementById("addVk").value.trim();
 
-        if (!nickname || !level || !status) {
+        if (!addId || !nickname || !level || !status) {
             showMessage("Заполните обязательные поля", "error");
             return;
         }
 
         try {
-            await db.collection("admins").add({
-                nickname: nickname,
-                level: level,
-                status: status,
+            const docRef = db.collection("admins").doc(addId);
+            const exists = await docRef.get();
+
+            if (exists.exists) {
+                showMessage("Администратор с таким ID уже существует", "error");
+                return;
+            }
+
+            let finalSortOrder = Number.isFinite(sortOrderInput) && sortOrderInput >= 1
+                ? sortOrderInput
+                : allAdmins.length + 1;
+
+            const currentList = sortAdmins(allAdmins);
+            if (finalSortOrder > currentList.length + 1) {
+                finalSortOrder = currentList.length + 1;
+            }
+
+            const batch = db.batch();
+
+            currentList.forEach((admin) => {
+                const currentOrder = Number(admin.sortOrder) || 999999;
+                if (currentOrder >= finalSortOrder) {
+                    batch.update(db.collection("admins").doc(admin.id), {
+                        sortOrder: currentOrder + 1
+                    });
+                }
+            });
+
+            batch.set(docRef, {
+                nickname,
+                level,
+                status,
                 vk: vk || "",
                 city: SERVER_CITY,
+                sortOrder: finalSortOrder,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            showMessage("Администратор добавлен", "success");
+            await batch.commit();
+            await normalizeSortOrders();
+            await loadAdmins();
+            filterAdmins();
 
             document.getElementById("addId").value = "";
+            document.getElementById("addSortOrder").value = "";
             document.getElementById("addNickname").value = "";
             document.getElementById("addLevel").value = "";
             document.getElementById("addStatus").value = "";
             document.getElementById("addVk").value = "";
 
-            await loadAdmins();
+            showMessage("Администратор добавлен", "success");
         } catch (error) {
-            console.error("Ошибка добавления администратора:", error);
+            console.error("Ошибка добавления:", error);
             showMessage("Ошибка при добавлении", "error");
         }
     });
 }
 
-// ==========================
-// BULK IMPORT
-// ==========================
 const bulkImportBtn = document.getElementById("bulkImportBtn");
 if (bulkImportBtn) {
     bulkImportBtn.addEventListener("click", async () => {
@@ -298,39 +420,43 @@ if (bulkImportBtn) {
             return;
         }
 
-        const lines = text.split("\n");
-        const batch = db.batch();
-        let count = 0;
-
-        lines.forEach(line => {
-            const parts = line.split("\t");
-            if (parts.length < 4) return;
-
-            const id = parts[0];
-            const nickname = parts[1];
-            const level = parts[2];
-            const status = parts[3];
-
-            if (!nickname) return;
-
-            const ref = db.collection("admins").doc();
-            batch.set(ref, {
-                nickname: nickname.trim(),
-                level: parseInt(level, 10) || 1,
-                status: status.trim(),
-                vk: "",
-                city: SERVER_CITY,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-
-            count++;
-        });
+        const lines = text.split("\n").map(line => line.trim()).filter(Boolean);
 
         try {
+            const batch = db.batch();
+            let count = 0;
+
+            for (const line of lines) {
+                const parts = line.split("\t").map(item => item.trim());
+                if (parts.length < 4) continue;
+
+                const docId = parts[0];
+                const nickname = parts[1];
+                const level = parseInt(parts[2], 10) || 1;
+                const status = parts[3];
+
+                if (!docId || !nickname) continue;
+
+                batch.set(db.collection("admins").doc(docId), {
+                    nickname,
+                    level,
+                    status,
+                    vk: "",
+                    city: SERVER_CITY,
+                    sortOrder: count + 1,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                count++;
+            }
+
             await batch.commit();
-            showMessage(`Импортировано: ${count}`, "success");
-            document.getElementById("bulkAdminText").value = "";
+            await normalizeSortOrders();
             await loadAdmins();
+            filterAdmins();
+
+            document.getElementById("bulkAdminText").value = "";
+            showMessage(`Импортировано: ${count}`, "success");
         } catch (error) {
             console.error("Ошибка импорта:", error);
             showMessage("Ошибка импорта", "error");
@@ -338,9 +464,6 @@ if (bulkImportBtn) {
     });
 }
 
-// ==========================
-// CLEAR ALL
-// ==========================
 const clearAllAdminsBtn = document.getElementById("clearAllAdminsBtn");
 if (clearAllAdminsBtn) {
     clearAllAdminsBtn.addEventListener("click", async () => {
@@ -352,11 +475,12 @@ if (clearAllAdminsBtn) {
                 .get();
 
             const batch = db.batch();
-            snapshot.forEach(doc => batch.delete(doc.ref));
+            snapshot.forEach((doc) => batch.delete(doc.ref));
             await batch.commit();
 
-            showMessage("Список очищен", "success");
             await loadAdmins();
+            filterAdmins();
+            showMessage("Список очищен", "success");
         } catch (error) {
             console.error("Ошибка очистки:", error);
             showMessage("Ошибка очистки", "error");
@@ -364,9 +488,6 @@ if (clearAllAdminsBtn) {
     });
 }
 
-// ==========================
-// LOAD ADMIN FOR EDIT
-// ==========================
 const loadAdminBtn = document.getElementById("loadAdminBtn");
 if (loadAdminBtn) {
     loadAdminBtn.addEventListener("click", async () => {
@@ -395,27 +516,25 @@ if (loadAdminBtn) {
             };
 
             document.getElementById("editNickname").value = currentEditingAdmin.nickname || "";
+            document.getElementById("editSortOrder").value = currentEditingAdmin.sortOrder || "";
             document.getElementById("editLevel").value = currentEditingAdmin.level || "";
             document.getElementById("editStatus").value = currentEditingAdmin.status || "";
             document.getElementById("editVk").value = currentEditingAdmin.vk || "";
-
             document.getElementById("editFields").style.display = "block";
         } catch (error) {
-            console.error("Ошибка загрузки администратора:", error);
+            console.error("Ошибка загрузки:", error);
             showMessage("Ошибка загрузки", "error");
         }
     });
 }
 
-// ==========================
-// UPDATE ADMIN
-// ==========================
 const updateAdminBtn = document.getElementById("updateAdminBtn");
 if (updateAdminBtn) {
     updateAdminBtn.addEventListener("click", async () => {
         if (!currentEditingAdmin) return;
 
         const nickname = document.getElementById("editNickname").value.trim();
+        const sortOrder = parseInt(document.getElementById("editSortOrder").value, 10);
         const level = parseInt(document.getElementById("editLevel").value, 10);
         const status = document.getElementById("editStatus").value.trim();
         const vk = document.getElementById("editVk").value.trim();
@@ -427,17 +546,25 @@ if (updateAdminBtn) {
 
         try {
             await db.collection("admins").doc(currentEditingAdmin.id).update({
-                nickname: nickname,
-                level: level,
-                status: status,
+                nickname,
+                level,
+                status,
                 vk: vk || "",
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            showMessage("Данные обновлены", "success");
+            if (Number.isFinite(sortOrder) && sortOrder >= 1) {
+                await moveAdminToPosition(currentEditingAdmin.id, sortOrder);
+            }
+
+            await normalizeSortOrders();
+            await loadAdmins();
+            filterAdmins();
+
             document.getElementById("editFields").style.display = "none";
             currentEditingAdmin = null;
-            await loadAdmins();
+
+            showMessage("Данные обновлены", "success");
         } catch (error) {
             console.error("Ошибка обновления:", error);
             showMessage("Ошибка обновления", "error");
@@ -445,9 +572,6 @@ if (updateAdminBtn) {
     });
 }
 
-// ==========================
-// DELETE ADMIN
-// ==========================
 const deleteAdminBtn = document.getElementById("deleteAdminBtn");
 if (deleteAdminBtn) {
     deleteAdminBtn.addEventListener("click", async () => {
@@ -457,10 +581,14 @@ if (deleteAdminBtn) {
 
         try {
             await db.collection("admins").doc(currentEditingAdmin.id).delete();
-            showMessage("Администратор удалён", "success");
+            await normalizeSortOrders();
+            await loadAdmins();
+            filterAdmins();
+
             document.getElementById("editFields").style.display = "none";
             currentEditingAdmin = null;
-            await loadAdmins();
+
+            showMessage("Администратор удалён", "success");
         } catch (error) {
             console.error("Ошибка удаления:", error);
             showMessage("Ошибка удаления", "error");
@@ -468,11 +596,17 @@ if (deleteAdminBtn) {
     });
 }
 
-// ==========================
-// INIT
-// ==========================
-document.addEventListener("DOMContentLoaded", () => {
-    loadAdmins();
+document.addEventListener("DOMContentLoaded", async () => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || "light";
+    applyTheme(savedTheme);
+
+    try {
+        await normalizeSortOrders();
+    } catch (error) {
+        console.error("Ошибка нормализации порядка:", error);
+    }
+
+    await loadAdmins();
 
     const isLoggedIn = localStorage.getItem("adminLoggedIn") === "true";
     if (isLoggedIn && adminPanelContent) {
