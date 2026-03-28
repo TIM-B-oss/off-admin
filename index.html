@@ -12,14 +12,36 @@
 <body>
     <div class="page">
         <header class="page-header">
-            <h1>Администрация</h1>
-            <p>Мониторинг действующих администраторов сервера</p>
+            <div class="header-top">
+                <div class="header-text">
+                    <h1>Администрация</h1>
+                    <p>Мониторинг действующих администраторов сервера</p>
+                </div>
+
+                <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="Переключить тему">
+                    <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="4"></circle>
+                        <path d="M12 2v2.5"></path>
+                        <path d="M12 19.5V22"></path>
+                        <path d="M4.93 4.93l1.77 1.77"></path>
+                        <path d="M17.3 17.3l1.77 1.77"></path>
+                        <path d="M2 12h2.5"></path>
+                        <path d="M19.5 12H22"></path>
+                        <path d="M4.93 19.07l1.77-1.77"></path>
+                        <path d="M17.3 6.7l1.77-1.77"></path>
+                    </svg>
+
+                    <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.8A9 9 0 1 1 11.2 3c-.1.5-.2 1-.2 1.5a8.5 8.5 0 0 0 8.5 8.5c.5 0 1 0 1.5-.2Z"></path>
+                    </svg>
+                </button>
+            </div>
         </header>
 
         <main class="card">
-            <div class="single-server-badge">
+            <button id="serverBadgeBtn" class="single-server-badge" type="button">
                 Санкт-Петербург
-            </div>
+            </button>
 
             <div class="search-wrap">
                 <input type="text" id="searchInput" placeholder="Поиск по нику админа..." />
@@ -42,7 +64,7 @@
     </div>
 
     <button id="openAdminPanelBtn" class="admin-fab" title="Админ-панель" aria-label="Открыть админ-панель">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c0 .66.39 1.26 1 1.51.16.06.33.09.51.09H21a2 2 0 1 1 0 4h-.09c-.18 0-.35.03-.51.09-.61.25-1 .85-1 1.51Z"/>
         </svg>
@@ -92,7 +114,8 @@
 
                     <div class="control-section">
                         <h3>Добавить администратора</h3>
-                        <input type="number" id="addId" placeholder="ID в базе" />
+                        <input type="number" id="addId" placeholder="ID в базе" min="1" />
+                        <input type="number" id="addSortOrder" placeholder="Позиция в списке" min="1" />
                         <input type="text" id="addNickname" placeholder="Игровой ник" />
                         <input type="number" id="addLevel" placeholder="Уровень" min="1" max="10" />
                         <input type="text" id="addStatus" placeholder="Статус" />
@@ -114,6 +137,11 @@
                             <div>
                                 <label>Игровой ник</label>
                                 <input type="text" id="editNickname" placeholder="Игровой ник" />
+                            </div>
+
+                            <div>
+                                <label>Позиция в списке</label>
+                                <input type="number" id="editSortOrder" placeholder="Позиция в списке" min="1" />
                             </div>
 
                             <div>
