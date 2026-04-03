@@ -8,9 +8,8 @@ const firebaseConfig = {
     measurementId: "G-GFPJ1MLCZ5"
 };
 
-const ADMIN_PASSWORD = "AdminPanel2025";
-const SERVER_CITY = "spb";
-const THEME_STORAGE_KEY = "siteTheme";
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 let allAdmins = [];
 let currentEditingAdmin = null;
