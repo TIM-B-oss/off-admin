@@ -259,7 +259,19 @@ async function loadLoginLogs() {
 
 async function addLoginLog(userData, action = "Вход в админ-панель") {
     try {
-        await db.collection("login_logs").add({
+        const login = (userData["логин"] || "user").replace(/\s+/g, "_");
+
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, "0");
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const year = now.getFullYear();
+        const hours = String(now.getHours()).padStart(2, "0");
+        const minutes = String(now.getMinutes()).padStart(2, "0");
+        const seconds = String(now.getSeconds()).padStart(2, "0");
+
+        const logId = `${login}_${day}-${month}-${year}_${hours}-${minutes}-${seconds}`;
+
+        await db.collection("login_logs").doc(logId).set({
             "имя": userData["имя"] || "",
             "логин": userData["логин"] || "",
             "роль": userData["роль"] || "",
