@@ -11,12 +11,13 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-const ADMIN_PASSWORD = "AdminPanel2025";
 const SERVER_CITY = "spb";
 const THEME_STORAGE_KEY = "siteTheme";
+const ADMIN_SESSION_KEY = "panelCurrentUser";
 
 let allAdmins = [];
 let currentEditingAdmin = null;
+let currentPanelUser = null;
 
 const adminPanel = document.getElementById("adminPanel");
 const adminPanelContent = document.getElementById("adminPanelContent");
@@ -27,6 +28,10 @@ const logoutBtn = document.getElementById("logoutBtn");
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const searchInput = document.getElementById("searchInput");
 const serverBadgeBtn = document.getElementById("serverBadgeBtn");
+const adminsTabBtn = document.getElementById("adminsTabBtn");
+const logsTabBtn = document.getElementById("logsTabBtn");
+const adminsTab = document.getElementById("adminsTab");
+const logsTab = document.getElementById("logsTab");
 
 function showMessage(text, type = "success") {
     const el = document.getElementById("actionMessage");
@@ -41,13 +46,12 @@ function showMessage(text, type = "success") {
     }, 4000);
 }
 
-function makeSafeDocId(nickname) {
-    return nickname.trim().replace(/\s+/g, "_");
+function makeSafeDocId(value) {
+    return value.trim().replace(/\s+/g, "_");
 }
 
 function mapAdminFromDoc(doc) {
     const data = doc.data() || {};
-
     return {
         id: doc.id,
         nickname: doc.id,
@@ -59,8 +63,56 @@ function mapAdminFromDoc(doc) {
     };
 }
 
+function getStatusPriority(status) {
+    const value = (status || "").toLowerCase().trim();
+
+    if (value.includes("основатель")) return 1;
+
+    if (
+        value.includes("ген.дир") ||
+        value.includes("ген дир") ||
+        value.includes("ген.директор") ||
+        value.includes("ген директор") ||
+        value.includes("ген.дир №") ||
+        value.includes("ген дир №")
+    ) return 2;
+
+    if (
+        value.includes("зам.ген.дир") ||
+        value.includes("зам ген.дир") ||
+        value.includes("зам ген дир") ||
+        value.includes("зам.ген дир") ||
+        value.includes("зам основателя")
+    ) return 3;
+
+    if (value === "са" || value.includes("спец администратор") || value.includes("с.а")) return 4;
+
+    if (value.includes("рук") || value.includes("руковод")) return 5;
+
+    if (value === "га" || value.startsWith("га ") || value.includes(" га")) return 6;
+
+    if (value.includes("зга")) return 7;
+
+    if (value.includes("куратор")) return 8;
+
+    if (value.includes("згс")) return 10;
+
+    if (value.includes("гс")) return 9;
+
+    if (value.includes("след")) return 11;
+
+    return 999;
+}
+
 function sortAdmins(admins) {
     return [...admins].sort((a, b) => {
+        const priorityA = getStatusPriority(a.status);
+        const priorityB = getStatusPriority(b.status);
+
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+        }
+
         const orderA = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
         const orderB = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
 
@@ -138,6 +190,77 @@ function toggleTheme() {
     applyTheme(currentTheme === "dark" ? "light" : "dark");
 }
 
+function formatDateTime(value) {
+    if (!value) return "—";
+
+    let date;
+    if (value.toDate) {
+        date = value.toDate();
+    } else {
+        date = new Date(value);
+    }
+
+    if (isNaN(date.getTime())) return "—";
+    return date.toLocaleString("ru-RU");
+}
+
+function renderLoginLogs(logs) {
+    const tbody = document.getElementById("loginLogsTableBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    if (!logs.length) {
+        tbody.innerHTML = `
+            <tr class="empty-row">
+                <td colspan="5">Нет логов входа</td>
+            </tr>
+        `;
+        return;
+    }
+
+    logs.forEach((log) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${log["имя"] || "—"}</td>
+            <td>${log["логин"] || "—"}</td>
+            <td>${log["роль"] || "—"}</td>
+            <td>${log["действие"] || "—"}</td>
+            <td>${formatDateTime(log["дата"])}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+async function loadLoginLogs() {
+    try {
+        const snapshot = await db.collection("login_logs")
+            .orderBy("дата", "desc")
+            .limit(50)
+            .get();
+
+        const logs = snapshot.docs.map(doc => doc.data());
+        renderLoginLogs(logs);
+    } catch (error) {
+        console.error("Ошибка загрузки логов:", error);
+        renderLoginLogs([]);
+    }
+}
+
+async function addLoginLog(userData, action = "Вход в админ-панель") {
+    try {
+        await db.collection("login_logs").add({
+            "имя": userData["имя"] || "",
+            "логин": userData["логин"] || "",
+            "роль": userData["роль"] || "",
+            "действие": action,
+            "дата": firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        console.error("Ошибка записи лога:", error);
+    }
+}
+
 async function loadAdmins() {
     try {
         const snapshot = await db.collection("admins")
@@ -209,6 +332,18 @@ async function moveAdminToPosition(adminId, targetPosition) {
     await batch.commit();
 }
 
+function updateCurrentUserInfo() {
+    const currentUserInfo = document.getElementById("currentUserInfo");
+    if (!currentUserInfo) return;
+
+    if (!currentPanelUser) {
+        currentUserInfo.textContent = "";
+        return;
+    }
+
+    currentUserInfo.textContent = `${currentPanelUser["имя"] || "Без имени"} (${currentPanelUser["логин"] || ""}) — ${currentPanelUser["роль"] || "Без роли"}`;
+}
+
 function setLoggedInState() {
     const loginForm = document.getElementById("loginForm");
     const adminControls = document.getElementById("adminControls");
@@ -223,17 +358,19 @@ function setLoggedInState() {
         adminPanelContent.classList.add("admin-mode");
     }
 
-    localStorage.setItem("adminLoggedIn", "true");
+    updateCurrentUserInfo();
 }
 
 function setLoggedOutState() {
     const loginForm = document.getElementById("loginForm");
     const adminControls = document.getElementById("adminControls");
+    const loginInput = document.getElementById("adminLogin");
     const passwordInput = document.getElementById("adminPassword");
     const loginError = document.getElementById("loginError");
 
     if (loginForm) loginForm.style.display = "block";
     if (adminControls) adminControls.style.display = "none";
+    if (loginInput) loginInput.value = "";
     if (passwordInput) passwordInput.value = "";
     if (loginError) loginError.textContent = "";
 
@@ -242,7 +379,8 @@ function setLoggedOutState() {
         adminPanelContent.classList.add("login-mode");
     }
 
-    localStorage.removeItem("adminLoggedIn");
+    currentPanelUser = null;
+    localStorage.removeItem(ADMIN_SESSION_KEY);
 }
 
 function filterAdmins() {
@@ -260,6 +398,29 @@ function filterAdmins() {
     renderAdmins(sortAdmins(filtered));
 }
 
+function activateTab(tabName) {
+    if (tabName === "logs") {
+        adminsTabBtn?.classList.remove("active");
+        logsTabBtn?.classList.add("active");
+        if (adminsTab) adminsTab.style.display = "none";
+        if (logsTab) logsTab.style.display = "block";
+        loadLoginLogs();
+    } else {
+        logsTabBtn?.classList.remove("active");
+        adminsTabBtn?.classList.add("active");
+        if (logsTab) logsTab.style.display = "none";
+        if (adminsTab) adminsTab.style.display = "block";
+    }
+}
+
+if (adminsTabBtn) {
+    adminsTabBtn.addEventListener("click", () => activateTab("admins"));
+}
+
+if (logsTabBtn) {
+    logsTabBtn.addEventListener("click", () => activateTab("logs"));
+}
+
 if (themeToggleBtn) {
     themeToggleBtn.addEventListener("click", toggleTheme);
 }
@@ -274,8 +435,9 @@ if (openAdminPanelBtn) {
     openAdminPanelBtn.addEventListener("click", () => {
         adminPanel.style.display = "flex";
 
-        const isLoggedIn = localStorage.getItem("adminLoggedIn") === "true";
-        if (isLoggedIn) {
+        const savedUser = localStorage.getItem(ADMIN_SESSION_KEY);
+        if (savedUser) {
+            currentPanelUser = JSON.parse(savedUser);
             setLoggedInState();
         } else {
             setLoggedOutState();
@@ -298,22 +460,61 @@ if (adminPanel) {
 }
 
 if (loginBtn) {
-    loginBtn.addEventListener("click", () => {
+    loginBtn.addEventListener("click", async () => {
+        const loginInput = document.getElementById("adminLogin");
         const passwordInput = document.getElementById("adminPassword");
         const loginError = document.getElementById("loginError");
 
-        if (!passwordInput || !loginError) return;
+        const login = loginInput?.value.trim();
+        const password = passwordInput?.value.trim();
 
-        if (passwordInput.value === ADMIN_PASSWORD) {
+        if (!login || !password) {
+            loginError.textContent = "Введите логин и пароль";
+            return;
+        }
+
+        try {
+            const doc = await db.collection("panel_users").doc(login).get();
+
+            if (!doc.exists) {
+                loginError.textContent = "Пользователь не найден";
+                return;
+            }
+
+            const userData = doc.data() || {};
+
+            if (userData["активен"] === false) {
+                loginError.textContent = "Этот аккаунт отключён";
+                return;
+            }
+
+            if ((userData["пароль"] || "") !== password) {
+                loginError.textContent = "Неверный пароль";
+                return;
+            }
+
+            currentPanelUser = {
+                "логин": userData["логин"] || login,
+                "имя": userData["имя"] || login,
+                "роль": userData["роль"] || "Пользователь"
+            };
+
+            localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(currentPanelUser));
             setLoggedInState();
-        } else {
-            loginError.textContent = "Неверный пароль";
+            activateTab("admins");
+            await addLoginLog(currentPanelUser, "Вход в админ-панель");
+        } catch (error) {
+            console.error("Ошибка входа:", error);
+            loginError.textContent = "Ошибка входа";
         }
     });
 }
 
 if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
+    logoutBtn.addEventListener("click", async () => {
+        if (currentPanelUser) {
+            await addLoginLog(currentPanelUser, "Выход из админ-панели");
+        }
         setLoggedOutState();
     });
 }
@@ -412,43 +613,68 @@ if (bulkImportBtn) {
             return;
         }
 
-        const lines = text.split("\n").map(line => line.trim()).filter(Boolean);
+        const lines = text
+            .split("\n")
+            .map(line => line.trim())
+            .filter(Boolean);
 
         try {
-            const batch = db.batch();
-            let count = 0;
+            const existingSnapshot = await db.collection("admins")
+                .where("город", "==", SERVER_CITY)
+                .get();
+
+            let existingAdmins = existingSnapshot.docs.map(mapAdminFromDoc);
+            existingAdmins = sortAdmins(existingAdmins);
+
+            let nextOrder = existingAdmins.length + 1;
+            let importedCount = 0;
 
             for (const line of lines) {
                 const parts = line.split("\t").map(item => item.trim());
-                if (parts.length < 3) continue;
+
+                if (parts.length < 4) continue;
 
                 const nickname = parts[0];
                 const level = parseInt(parts[1], 10) || 1;
                 const status = parts[2];
+                const vk = parts[3];
 
-                if (!nickname) continue;
+                if (!nickname || !status) continue;
 
                 const docId = makeSafeDocId(nickname);
+                const docRef = db.collection("admins").doc(docId);
+                const existingDoc = await docRef.get();
 
-                batch.set(db.collection("admins").doc(docId), {
-                    "уровень": level,
-                    "статус": status,
-                    "вк": "",
-                    "город": SERVER_CITY,
-                    "порядок": count + 1,
-                    "обновлен": firebase.firestore.FieldValue.serverTimestamp()
-                });
+                if (existingDoc.exists) {
+                    await docRef.update({
+                        "уровень": level,
+                        "статус": status,
+                        "вк": vk || "",
+                        "город": SERVER_CITY,
+                        "обновлен": firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } else {
+                    await docRef.set({
+                        "уровень": level,
+                        "статус": status,
+                        "вк": vk || "",
+                        "город": SERVER_CITY,
+                        "порядок": nextOrder,
+                        "создан": firebase.firestore.FieldValue.serverTimestamp()
+                    });
 
-                count++;
+                    nextOrder++;
+                }
+
+                importedCount++;
             }
 
-            await batch.commit();
             await normalizeSortOrders();
             await loadAdmins();
             filterAdmins();
 
             document.getElementById("bulkAdminText").value = "";
-            showMessage(`Импортировано: ${count}`, "success");
+            showMessage(`Импортировано: ${importedCount}`, "success");
         } catch (error) {
             console.error("Ошибка импорта:", error);
             showMessage("Ошибка импорта", "error");
@@ -628,8 +854,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await loadAdmins();
 
-    const isLoggedIn = localStorage.getItem("adminLoggedIn") === "true";
-    if (isLoggedIn && adminPanelContent) {
+    const savedUser = localStorage.getItem(ADMIN_SESSION_KEY);
+    if (savedUser && adminPanelContent) {
+        currentPanelUser = JSON.parse(savedUser);
         adminPanelContent.classList.remove("login-mode");
         adminPanelContent.classList.add("admin-mode");
     }
