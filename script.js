@@ -109,18 +109,18 @@ function getStatusPriority(status) {
 
 function sortAdmins(admins) {
     return [...admins].sort((a, b) => {
-        const priorityA = getStatusPriority(a.status);
-        const priorityB = getStatusPriority(b.status);
-
-        if (priorityA !== priorityB) {
-            return priorityA - priorityB;
-        }
-
         const orderA = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
         const orderB = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
 
         if (orderA !== orderB) {
             return orderA - orderB;
+        }
+
+        const priorityA = getStatusPriority(a.status);
+        const priorityB = getStatusPriority(b.status);
+
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
         }
 
         const levelA = Number(a.level) || 0;
@@ -204,8 +204,11 @@ function formatDateTime(value) {
     if (!value) return "—";
 
     let date;
-    if (value.toDate) date = value.toDate();
-    else date = new Date(value);
+    if (value.toDate) {
+        date = value.toDate();
+    } else {
+        date = new Date(value);
+    }
 
     if (isNaN(date.getTime())) return "—";
     return date.toLocaleString("ru-RU");
@@ -303,7 +306,9 @@ async function normalizeSortOrders() {
         }
     });
 
-    if (changed) await batch.commit();
+    if (changed) {
+        await batch.commit();
+    }
 }
 
 async function moveAdminToPosition(adminId, targetPosition) {
@@ -418,8 +423,13 @@ function activateTab(tabName) {
     }
 }
 
-if (adminsTabBtn) adminsTabBtn.addEventListener("click", () => activateTab("admins"));
-if (logsTabBtn) logsTabBtn.addEventListener("click", () => activateTab("logs"));
+if (adminsTabBtn) {
+    adminsTabBtn.addEventListener("click", () => activateTab("admins"));
+}
+
+if (logsTabBtn) {
+    logsTabBtn.addEventListener("click", () => activateTab("logs"));
+}
 
 if (clearLoginLogsBtn) {
     clearLoginLogsBtn.addEventListener("click", async () => {
@@ -429,7 +439,9 @@ if (clearLoginLogsBtn) {
             const snapshot = await db.collection("login_logs").get();
             const batch = db.batch();
 
-            snapshot.forEach((doc) => batch.delete(doc.ref));
+            snapshot.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
 
             await batch.commit();
             await loadLoginLogs();
@@ -441,7 +453,9 @@ if (clearLoginLogsBtn) {
     });
 }
 
-if (themeToggleBtn) themeToggleBtn.addEventListener("click", toggleTheme);
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", toggleTheme);
+}
 
 if (serverBadgeBtn) {
     serverBadgeBtn.addEventListener("click", () => {
@@ -471,7 +485,9 @@ if (closeAdminPanelBtn) {
 
 if (adminPanel) {
     adminPanel.addEventListener("click", (e) => {
-        if (e.target === adminPanel) adminPanel.style.display = "none";
+        if (e.target === adminPanel) {
+            adminPanel.style.display = "none";
+        }
     });
 }
 
@@ -538,11 +554,15 @@ if (logoutBtn) {
 const adminPasswordInput = document.getElementById("adminPassword");
 if (adminPasswordInput) {
     adminPasswordInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && loginBtn) loginBtn.click();
+        if (e.key === "Enter" && loginBtn) {
+            loginBtn.click();
+        }
     });
 }
 
-if (searchInput) searchInput.addEventListener("input", filterAdmins);
+if (searchInput) {
+    searchInput.addEventListener("input", filterAdmins);
+}
 
 const addAdminBtn = document.getElementById("addAdminBtn");
 if (addAdminBtn) {
@@ -625,7 +645,10 @@ if (bulkImportBtn) {
             return;
         }
 
-        const lines = text.split("\n").map(line => line.trim()).filter(Boolean);
+        const lines = text
+            .split("\n")
+            .map(line => line.trim())
+            .filter(Boolean);
 
         try {
             const existingSnapshot = await db.collection("admins")
@@ -640,6 +663,7 @@ if (bulkImportBtn) {
 
             for (const line of lines) {
                 const parts = line.split("\t").map(item => item.trim());
+
                 if (parts.length < 4) continue;
 
                 const nickname = parts[0];
@@ -670,6 +694,7 @@ if (bulkImportBtn) {
                         "порядок": nextOrder,
                         "создан": firebase.firestore.FieldValue.serverTimestamp()
                     });
+
                     nextOrder++;
                 }
 
