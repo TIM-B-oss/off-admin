@@ -86,80 +86,117 @@
             </div>
 
             <div id="loginForm" class="login-block">
-                <label for="adminPassword">Пароль администратора</label>
+                <label for="adminLogin">Логин</label>
+                <input type="text" id="adminLogin" placeholder="Введите логин" />
+
+                <label for="adminPassword">Пароль</label>
                 <input type="password" id="adminPassword" placeholder="Введите пароль" />
+
                 <button id="loginBtn" class="primary-btn">Войти</button>
                 <p id="loginError" class="error-message"></p>
             </div>
 
             <div id="adminControls" class="admin-controls" style="display:none;">
                 <div class="admin-topbar">
-                    <div class="admin-topbar-title">Вы вошли как администратор</div>
+                    <div>
+                        <div class="admin-topbar-title">Вы вошли в админ-панель</div>
+                        <div id="currentUserInfo" class="current-user-info"></div>
+                    </div>
                     <button id="logoutBtn" class="secondary-btn logout-btn">Выйти из аккаунта</button>
                 </div>
 
-                <div class="grid-2">
-                    <div class="control-section">
-                        <h3>Массовое добавление</h3>
-                        <label>Данные администраторов</label>
-                        <textarea id="bulkAdminText" rows="10" placeholder="Пример:
-Chris_Montana	8	Создатель
-Ivan_Ivanov	6	Куратор"></textarea>
+                <div class="admin-tabs">
+                    <button id="adminsTabBtn" class="admin-tab-btn active" type="button">Администраторы</button>
+                    <button id="logsTabBtn" class="admin-tab-btn" type="button">Логи входа</button>
+                </div>
 
-                        <div class="button-row">
-                            <button id="bulkImportBtn" class="primary-btn">Импортировать всех</button>
-                            <button id="clearAllAdminsBtn" class="danger-btn">Очистить список</button>
+                <div id="adminsTab" class="admin-tab-content active">
+                    <div class="grid-2">
+                        <div class="control-section">
+                            <h3>Массовое добавление</h3>
+                            <label>Данные администраторов</label>
+                            <textarea id="bulkAdminText" rows="10" placeholder="Формат:
+Ник	Уровень	Статус	VK
+
+Пример:
+Typhoon	10	Ген.Дир №2	https://vk.com/qbertol
+L.Danchenko	9	ГА	https://vk.com/lfenatiev"></textarea>
+
+                            <div class="button-row">
+                                <button id="bulkImportBtn" class="primary-btn">Импортировать всех</button>
+                                <button id="clearAllAdminsBtn" class="danger-btn">Очистить список</button>
+                            </div>
+                        </div>
+
+                        <div class="control-section">
+                            <h3>Добавить администратора</h3>
+                            <input type="number" id="addSortOrder" placeholder="Позиция в списке" min="1" />
+                            <input type="text" id="addNickname" placeholder="Игровой ник" />
+                            <input type="number" id="addLevel" placeholder="Уровень" min="1" max="10" />
+                            <input type="text" id="addStatus" placeholder="Статус" />
+                            <input type="text" id="addVk" placeholder="VK ссылка" />
+                            <button id="addAdminBtn" class="primary-btn">Добавить</button>
                         </div>
                     </div>
 
                     <div class="control-section">
-                        <h3>Добавить администратора</h3>
-                        <input type="number" id="addSortOrder" placeholder="Позиция в списке" min="1" />
-                        <input type="text" id="addNickname" placeholder="Игровой ник" />
-                        <input type="number" id="addLevel" placeholder="Уровень" min="1" max="10" />
-                        <input type="text" id="addStatus" placeholder="Статус" />
-                        <input type="text" id="addVk" placeholder="VK ссылка" />
-                        <button id="addAdminBtn" class="primary-btn">Добавить</button>
+                        <h3>Редактировать администратора</h3>
+                        <label>Игровой ник</label>
+                        <input type="text" id="editNicknameSearch" placeholder="Введите ник" />
+                        <button id="loadAdminBtn" class="secondary-btn">Загрузить данные</button>
+
+                        <div id="editFields" style="display:none; margin-top:14px;">
+                            <div class="grid-2">
+                                <div>
+                                    <label>Игровой ник</label>
+                                    <input type="text" id="editNickname" placeholder="Игровой ник" />
+                                </div>
+
+                                <div>
+                                    <label>Позиция в списке</label>
+                                    <input type="number" id="editSortOrder" placeholder="Позиция в списке" min="1" />
+                                </div>
+
+                                <div>
+                                    <label>Уровень</label>
+                                    <input type="number" id="editLevel" placeholder="Уровень" min="1" max="10" />
+                                </div>
+
+                                <div>
+                                    <label>Статус</label>
+                                    <input type="text" id="editStatus" placeholder="Статус" />
+                                </div>
+
+                                <div>
+                                    <label>VK ссылка</label>
+                                    <input type="text" id="editVk" placeholder="VK ссылка" />
+                                </div>
+                            </div>
+
+                            <div class="button-row">
+                                <button id="updateAdminBtn" class="primary-btn">Обновить</button>
+                                <button id="deleteAdminBtn" class="danger-btn">Удалить</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="control-section">
-                    <h3>Редактировать администратора</h3>
-                    <label>Игровой ник</label>
-                    <input type="text" id="editNicknameSearch" placeholder="Введите ник" />
-                    <button id="loadAdminBtn" class="secondary-btn">Загрузить данные</button>
-
-                    <div id="editFields" style="display:none; margin-top:14px;">
-                        <div class="grid-2">
-                            <div>
-                                <label>Игровой ник</label>
-                                <input type="text" id="editNickname" placeholder="Игровой ник" />
-                            </div>
-
-                            <div>
-                                <label>Позиция в списке</label>
-                                <input type="number" id="editSortOrder" placeholder="Позиция в списке" min="1" />
-                            </div>
-
-                            <div>
-                                <label>Уровень</label>
-                                <input type="number" id="editLevel" placeholder="Уровень" min="1" max="10" />
-                            </div>
-
-                            <div>
-                                <label>Статус</label>
-                                <input type="text" id="editStatus" placeholder="Статус" />
-                            </div>
-
-                            <div>
-                                <label>VK ссылка</label>
-                                <input type="text" id="editVk" placeholder="VK ссылка" />
-                            </div>
-                        </div>
-
-                        <div class="button-row">
-                            <button id="updateAdminBtn" class="primary-btn">Обновить</button>
-                            <button id="deleteAdminBtn" class="danger-btn">Удалить</button>
+                <div id="logsTab" class="admin-tab-content" style="display:none;">
+                    <div class="control-section">
+                        <h3>Логи входа</h3>
+                        <div class="table-shell">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>ИМЯ</th>
+                                        <th>ЛОГИН</th>
+                                        <th>РОЛЬ</th>
+                                        <th>ДЕЙСТВИЕ</th>
+                                        <th>ДАТА И ВРЕМЯ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="loginLogsTableBody"></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
