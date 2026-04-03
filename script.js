@@ -32,6 +32,7 @@ const adminsTabBtn = document.getElementById("adminsTabBtn");
 const logsTabBtn = document.getElementById("logsTabBtn");
 const adminsTab = document.getElementById("adminsTab");
 const logsTab = document.getElementById("logsTab");
+const clearLoginLogsBtn = document.getElementById("clearLoginLogsBtn");
 
 function showMessage(text, type = "success") {
     const el = document.getElementById("actionMessage");
@@ -419,6 +420,28 @@ if (adminsTabBtn) {
 
 if (logsTabBtn) {
     logsTabBtn.addEventListener("click", () => activateTab("logs"));
+}
+
+if (clearLoginLogsBtn) {
+    clearLoginLogsBtn.addEventListener("click", async () => {
+        if (!confirm("Удалить все логи входа?")) return;
+
+        try {
+            const snapshot = await db.collection("login_logs").get();
+            const batch = db.batch();
+
+            snapshot.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+
+            await batch.commit();
+            await loadLoginLogs();
+            showMessage("Логи входа очищены", "success");
+        } catch (error) {
+            console.error("Ошибка очистки логов:", error);
+            showMessage("Ошибка очистки логов", "error");
+        }
+    });
 }
 
 if (themeToggleBtn) {
