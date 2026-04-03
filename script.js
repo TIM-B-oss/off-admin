@@ -4,8 +4,8 @@ const firebaseConfig = {
     projectId: "admin-panel-site-c6658",
     storageBucket: "admin-panel-site-c6658.firebasestorage.app",
     messagingSenderId: "1007133132643",
-    appId: "1:1007133132643:web:f6cd422ad6ca5a7879b556",
-    measurementId: "G-M4C3FPTYH5"
+    appId: "1:1007133132643:web:d8f203b6736fef5879b556",
+    measurementId: "G-GFPJ1MLCZ5"
 };
 
 firebase.initializeApp(firebaseConfig);
