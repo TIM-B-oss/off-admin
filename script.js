@@ -14,6 +14,8 @@ const db = firebase.firestore();
 const SERVER_CITY = "spb";
 const THEME_STORAGE_KEY = "siteTheme";
 const ADMIN_SESSION_KEY = "panelCurrentUser";
+const MIN_LEVEL = 1;
+const MAX_LEVEL = 8;
 
 let allAdmins = [];
 let currentEditingAdmin = null;
@@ -49,6 +51,13 @@ function showMessage(text, type = "success") {
 
 function makeSafeDocId(value) {
     return value.trim().replace(/\s+/g, "_");
+}
+
+function normalizeLevel(value) {
+    const level = parseInt(value, 10);
+    if (!Number.isFinite(level)) return null;
+    if (level < MIN_LEVEL || level > MAX_LEVEL) return null;
+    return level;
 }
 
 function mapAdminFromDoc(doc) {
@@ -103,12 +112,23 @@ function sortAdmins(admins) {
         const priorityA = getStatusPriority(a.status);
         const priorityB = getStatusPriority(b.status);
 
-        if (priorityA !== priorityB) return priorityA - priorityB;
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+        }
 
         const orderA = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
         const orderB = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
 
-        if (orderA !== orderB) return orderA - orderB;
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+
+        const levelA = Number(a.level) || 0;
+        const levelB = Number(b.level) || 0;
+
+        if (levelA !== levelB) {
+            return levelB - levelA;
+        }
 
         return (a.nickname || "").localeCompare((b.nickname || ""), "ru");
     });
@@ -529,12 +549,12 @@ if (addAdminBtn) {
     addAdminBtn.addEventListener("click", async () => {
         const sortOrderInput = parseInt(document.getElementById("addSortOrder").value, 10);
         const nickname = document.getElementById("addNickname").value.trim();
-        const level = parseInt(document.getElementById("addLevel").value, 10);
+        const level = normalizeLevel(document.getElementById("addLevel").value);
         const status = document.getElementById("addStatus").value.trim();
         const vk = document.getElementById("addVk").value.trim();
 
         if (!nickname || !level || !status) {
-            showMessage("Заполните обязательные поля", "error");
+            showMessage("Заполните обязательные поля. Уровень должен быть от 1 до 8", "error");
             return;
         }
 
@@ -623,11 +643,11 @@ if (bulkImportBtn) {
                 if (parts.length < 4) continue;
 
                 const nickname = parts[0];
-                const level = parseInt(parts[1], 10) || 1;
+                const level = normalizeLevel(parts[1]);
                 const status = parts[2];
                 const vk = parts[3];
 
-                if (!nickname || !status) continue;
+                if (!nickname || !status || !level) continue;
 
                 const docId = makeSafeDocId(nickname);
                 const docRef = db.collection("admins").doc(docId);
@@ -741,12 +761,12 @@ if (updateAdminBtn) {
 
         const newNickname = document.getElementById("editNickname").value.trim();
         const sortOrder = parseInt(document.getElementById("editSortOrder").value, 10);
-        const level = parseInt(document.getElementById("editLevel").value, 10);
+        const level = normalizeLevel(document.getElementById("editLevel").value);
         const status = document.getElementById("editStatus").value.trim();
         const vk = document.getElementById("editVk").value.trim();
 
         if (!newNickname || !level || !status) {
-            showMessage("Заполните обязательные поля", "error");
+            showMessage("Заполните обязательные поля. Уровень должен быть от 1 до 8", "error");
             return;
         }
 
