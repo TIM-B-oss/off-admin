@@ -11,6 +11,10 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+const ADMIN_PASSWORD = "AdminPanel2025";
+const SERVER_CITY = "spb";
+const THEME_STORAGE_KEY = "siteTheme";
+
 let allAdmins = [];
 let currentEditingAdmin = null;
 
@@ -193,7 +197,6 @@ async function moveAdminToPosition(adminId, targetPosition) {
     sorted.splice(currentIndex, 1);
 
     let newIndex = targetPosition - 1;
-
     if (newIndex < 0) newIndex = 0;
     if (newIndex > sorted.length) newIndex = sorted.length;
 
