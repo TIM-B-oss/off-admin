@@ -1,16 +1,12 @@
 const firebaseConfig = {
-  apiKey: "AIzaSyC3uqEIX7Zee5_T9NAp5impPdK2nCPYIFo",
-  authDomain: "admin-panel-site-c6658.firebaseapp.com",
-  projectId: "admin-panel-site-c6658",
-  storageBucket: "admin-panel-site-c6658.firebasestorage.app",
-  messagingSenderId: "1007133132643",
-  appId: "1:1007133132643:web:d8f203b6736fef5879b556",
-  measurementId: "G-GFPJ1MLCZ5"
+    apiKey: "AIzaSyC3uqEIX7Zee5_T9NAp5impPdK2nCPYIFo",
+    authDomain: "admin-panel-site-c6658.firebaseapp.com",
+    projectId: "admin-panel-site-c6658",
+    storageBucket: "admin-panel-site-c6658.firebasestorage.app",
+    messagingSenderId: "1007133132643",
+    appId: "1:1007133132643:web:d8f203b6736fef5879b556",
+    measurementId: "G-GFPJ1MLCZ5"
 };
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 
 const ADMIN_PASSWORD = "AdminPanel2025";
 const SERVER_CITY = "spb";
