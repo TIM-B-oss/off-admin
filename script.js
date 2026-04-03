@@ -339,27 +339,18 @@ if (searchInput) {
 const addAdminBtn = document.getElementById("addAdminBtn");
 if (addAdminBtn) {
     addAdminBtn.addEventListener("click", async () => {
-        const addId = document.getElementById("addId").value.trim();
         const sortOrderInput = parseInt(document.getElementById("addSortOrder").value, 10);
         const nickname = document.getElementById("addNickname").value.trim();
         const level = parseInt(document.getElementById("addLevel").value, 10);
         const status = document.getElementById("addStatus").value.trim();
         const vk = document.getElementById("addVk").value.trim();
 
-        if (!addId || !nickname || !level || !status) {
+        if (!nickname || !level || !status) {
             showMessage("Заполните обязательные поля", "error");
             return;
         }
 
         try {
-            const docRef = db.collection("admins").doc(addId);
-            const exists = await docRef.get();
-
-            if (exists.exists) {
-                showMessage("Администратор с таким ID уже существует", "error");
-                return;
-            }
-
             let finalSortOrder = Number.isFinite(sortOrderInput) && sortOrderInput >= 1
                 ? sortOrderInput
                 : allAdmins.length + 1;
@@ -380,7 +371,9 @@ if (addAdminBtn) {
                 }
             });
 
-            batch.set(docRef, {
+            const newDocRef = db.collection("admins").doc();
+
+            batch.set(newDocRef, {
                 nickname,
                 level,
                 status,
@@ -395,7 +388,6 @@ if (addAdminBtn) {
             await loadAdmins();
             filterAdmins();
 
-            document.getElementById("addId").value = "";
             document.getElementById("addSortOrder").value = "";
             document.getElementById("addNickname").value = "";
             document.getElementById("addLevel").value = "";
@@ -428,16 +420,17 @@ if (bulkImportBtn) {
 
             for (const line of lines) {
                 const parts = line.split("\t").map(item => item.trim());
-                if (parts.length < 4) continue;
+                if (parts.length < 3) continue;
 
-                const docId = parts[0];
-                const nickname = parts[1];
-                const level = parseInt(parts[2], 10) || 1;
-                const status = parts[3];
+                const nickname = parts[0];
+                const level = parseInt(parts[1], 10) || 1;
+                const status = parts[2];
 
-                if (!docId || !nickname) continue;
+                if (!nickname) continue;
 
-                batch.set(db.collection("admins").doc(docId), {
+                const docRef = db.collection("admins").doc();
+
+                batch.set(docRef, {
                     nickname,
                     level,
                     status,
