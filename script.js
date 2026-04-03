@@ -41,6 +41,24 @@ function showMessage(text, type = "success") {
     }, 4000);
 }
 
+function makeSafeDocId(nickname) {
+    return nickname.trim().replace(/\s+/g, "_");
+}
+
+function mapAdminFromDoc(doc) {
+    const data = doc.data() || {};
+
+    return {
+        id: doc.id,
+        nickname: doc.id,
+        level: data["уровень"] ?? "",
+        status: data["статус"] ?? "",
+        vk: data["вк"] ?? "",
+        city: data["город"] ?? "",
+        sortOrder: data["порядок"] ?? 999999
+    };
+}
+
 function sortAdmins(admins) {
     return [...admins].sort((a, b) => {
         const orderA = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
@@ -123,18 +141,10 @@ function toggleTheme() {
 async function loadAdmins() {
     try {
         const snapshot = await db.collection("admins")
-            .where("city", "==", SERVER_CITY)
+            .where("город", "==", SERVER_CITY)
             .get();
 
-        allAdmins = [];
-
-        snapshot.forEach((doc) => {
-            allAdmins.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
-
+        allAdmins = snapshot.docs.map(mapAdminFromDoc);
         allAdmins = sortAdmins(allAdmins);
         renderAdmins(allAdmins);
     } catch (error) {
@@ -145,17 +155,10 @@ async function loadAdmins() {
 
 async function normalizeSortOrders() {
     const snapshot = await db.collection("admins")
-        .where("city", "==", SERVER_CITY)
+        .where("город", "==", SERVER_CITY)
         .get();
 
-    const admins = [];
-    snapshot.forEach((doc) => {
-        admins.push({
-            id: doc.id,
-            ...doc.data()
-        });
-    });
-
+    const admins = snapshot.docs.map(mapAdminFromDoc);
     const sorted = sortAdmins(admins);
     const batch = db.batch();
     let changed = false;
@@ -164,7 +167,7 @@ async function normalizeSortOrders() {
         const correctOrder = index + 1;
         if (Number(admin.sortOrder) !== correctOrder) {
             batch.update(db.collection("admins").doc(admin.id), {
-                sortOrder: correctOrder
+                "порядок": correctOrder
             });
             changed = true;
         }
@@ -177,36 +180,29 @@ async function normalizeSortOrders() {
 
 async function moveAdminToPosition(adminId, targetPosition) {
     const snapshot = await db.collection("admins")
-        .where("city", "==", SERVER_CITY)
+        .where("город", "==", SERVER_CITY)
         .get();
 
-    const admins = [];
-    snapshot.forEach((doc) => {
-        admins.push({
-            id: doc.id,
-            ...doc.data()
-        });
-    });
+    let admins = snapshot.docs.map(mapAdminFromDoc);
+    admins = sortAdmins(admins);
 
-    let sorted = sortAdmins(admins);
-    const currentIndex = sorted.findIndex((admin) => admin.id === adminId);
-
+    const currentIndex = admins.findIndex((admin) => admin.id === adminId);
     if (currentIndex === -1) return;
 
-    const movedAdmin = sorted[currentIndex];
-    sorted.splice(currentIndex, 1);
+    const movedAdmin = admins[currentIndex];
+    admins.splice(currentIndex, 1);
 
     let newIndex = targetPosition - 1;
     if (newIndex < 0) newIndex = 0;
-    if (newIndex > sorted.length) newIndex = sorted.length;
+    if (newIndex > admins.length) newIndex = admins.length;
 
-    sorted.splice(newIndex, 0, movedAdmin);
+    admins.splice(newIndex, 0, movedAdmin);
 
     const batch = db.batch();
 
-    sorted.forEach((admin, index) => {
+    admins.forEach((admin, index) => {
         batch.update(db.collection("admins").doc(admin.id), {
-            sortOrder: index + 1
+            "порядок": index + 1
         });
     });
 
@@ -349,7 +345,15 @@ if (addAdminBtn) {
             return;
         }
 
+        const docId = makeSafeDocId(nickname);
+
         try {
+            const checkDoc = await db.collection("admins").doc(docId).get();
+            if (checkDoc.exists) {
+                showMessage("Администратор с таким ником уже существует", "error");
+                return;
+            }
+
             let finalSortOrder = Number.isFinite(sortOrderInput) && sortOrderInput >= 1
                 ? sortOrderInput
                 : allAdmins.length + 1;
@@ -365,21 +369,18 @@ if (addAdminBtn) {
                 const currentOrder = Number(admin.sortOrder) || 999999;
                 if (currentOrder >= finalSortOrder) {
                     batch.update(db.collection("admins").doc(admin.id), {
-                        sortOrder: currentOrder + 1
+                        "порядок": currentOrder + 1
                     });
                 }
             });
 
-            const newDocRef = db.collection("admins").doc();
-
-            batch.set(newDocRef, {
-                nickname,
-                level,
-                status,
-                vk: vk || "",
-                city: SERVER_CITY,
-                sortOrder: finalSortOrder,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            batch.set(db.collection("admins").doc(docId), {
+                "уровень": level,
+                "статус": status,
+                "вк": vk || "",
+                "город": SERVER_CITY,
+                "порядок": finalSortOrder,
+                "создан": firebase.firestore.FieldValue.serverTimestamp()
             });
 
             await batch.commit();
@@ -427,16 +428,15 @@ if (bulkImportBtn) {
 
                 if (!nickname) continue;
 
-                const docRef = db.collection("admins").doc();
+                const docId = makeSafeDocId(nickname);
 
-                batch.set(docRef, {
-                    nickname,
-                    level,
-                    status,
-                    vk: "",
-                    city: SERVER_CITY,
-                    sortOrder: count + 1,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                batch.set(db.collection("admins").doc(docId), {
+                    "уровень": level,
+                    "статус": status,
+                    "вк": "",
+                    "город": SERVER_CITY,
+                    "порядок": count + 1,
+                    "обновлен": firebase.firestore.FieldValue.serverTimestamp()
                 });
 
                 count++;
@@ -463,7 +463,7 @@ if (clearAllAdminsBtn) {
 
         try {
             const snapshot = await db.collection("admins")
-                .where("city", "==", SERVER_CITY)
+                .where("город", "==", SERVER_CITY)
                 .get();
 
             const batch = db.batch();
@@ -484,6 +484,7 @@ const loadAdminBtn = document.getElementById("loadAdminBtn");
 if (loadAdminBtn) {
     loadAdminBtn.addEventListener("click", async () => {
         const nickname = document.getElementById("editNicknameSearch").value.trim();
+        const docId = makeSafeDocId(nickname);
 
         if (!nickname) {
             showMessage("Введите ник", "error");
@@ -491,27 +492,27 @@ if (loadAdminBtn) {
         }
 
         try {
-            const snapshot = await db.collection("admins")
-                .where("city", "==", SERVER_CITY)
-                .where("nickname", "==", nickname)
-                .get();
+            const doc = await db.collection("admins").doc(docId).get();
 
-            if (snapshot.empty) {
+            if (!doc.exists) {
                 showMessage("Администратор не найден", "error");
                 return;
             }
 
-            const doc = snapshot.docs[0];
-            currentEditingAdmin = {
-                id: doc.id,
-                ...doc.data()
-            };
+            const admin = mapAdminFromDoc(doc);
 
-            document.getElementById("editNickname").value = currentEditingAdmin.nickname || "";
-            document.getElementById("editSortOrder").value = currentEditingAdmin.sortOrder || "";
-            document.getElementById("editLevel").value = currentEditingAdmin.level || "";
-            document.getElementById("editStatus").value = currentEditingAdmin.status || "";
-            document.getElementById("editVk").value = currentEditingAdmin.vk || "";
+            if (admin.city !== SERVER_CITY) {
+                showMessage("Администратор не найден на этом сервере", "error");
+                return;
+            }
+
+            currentEditingAdmin = admin;
+
+            document.getElementById("editNickname").value = admin.nickname || "";
+            document.getElementById("editSortOrder").value = admin.sortOrder || "";
+            document.getElementById("editLevel").value = admin.level || "";
+            document.getElementById("editStatus").value = admin.status || "";
+            document.getElementById("editVk").value = admin.vk || "";
             document.getElementById("editFields").style.display = "block";
         } catch (error) {
             console.error("Ошибка загрузки:", error);
@@ -525,25 +526,52 @@ if (updateAdminBtn) {
     updateAdminBtn.addEventListener("click", async () => {
         if (!currentEditingAdmin) return;
 
-        const nickname = document.getElementById("editNickname").value.trim();
+        const newNickname = document.getElementById("editNickname").value.trim();
         const sortOrder = parseInt(document.getElementById("editSortOrder").value, 10);
         const level = parseInt(document.getElementById("editLevel").value, 10);
         const status = document.getElementById("editStatus").value.trim();
         const vk = document.getElementById("editVk").value.trim();
 
-        if (!nickname || !level || !status) {
+        if (!newNickname || !level || !status) {
             showMessage("Заполните обязательные поля", "error");
             return;
         }
 
+        const newDocId = makeSafeDocId(newNickname);
+        const oldDocId = currentEditingAdmin.id;
+
         try {
-            await db.collection("admins").doc(currentEditingAdmin.id).update({
-                nickname,
-                level,
-                status,
-                vk: vk || "",
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            if (newDocId !== oldDocId) {
+                const newDocCheck = await db.collection("admins").doc(newDocId).get();
+                if (newDocCheck.exists) {
+                    showMessage("Администратор с таким ником уже существует", "error");
+                    return;
+                }
+
+                const oldDocSnapshot = await db.collection("admins").doc(oldDocId).get();
+                const oldData = oldDocSnapshot.data() || {};
+
+                await db.collection("admins").doc(newDocId).set({
+                    ...oldData,
+                    "уровень": level,
+                    "статус": status,
+                    "вк": vk || "",
+                    "город": SERVER_CITY,
+                    "обновлен": firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                await db.collection("admins").doc(oldDocId).delete();
+                currentEditingAdmin.id = newDocId;
+                currentEditingAdmin.nickname = newDocId;
+            } else {
+                await db.collection("admins").doc(oldDocId).update({
+                    "уровень": level,
+                    "статус": status,
+                    "вк": vk || "",
+                    "город": SERVER_CITY,
+                    "обновлен": firebase.firestore.FieldValue.serverTimestamp()
+                });
+            }
 
             if (Number.isFinite(sortOrder) && sortOrder >= 1) {
                 await moveAdminToPosition(currentEditingAdmin.id, sortOrder);
