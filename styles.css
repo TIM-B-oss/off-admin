@@ -334,11 +334,12 @@ body[data-theme="dark"] .theme-icon-moon {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.58);
-    backdrop-filter: blur(3px);
+    backdrop-filter: blur(4px);
     z-index: 2000;
     align-items: center;
     justify-content: center;
     padding: 20px;
+    animation: panelFadeIn 0.22s ease;
 }
 
 .admin-panel-content {
@@ -350,6 +351,7 @@ body[data-theme="dark"] .theme-icon-moon {
     max-height: 92vh;
     overflow-y: auto;
     overflow-x: hidden;
+    transform-origin: center;
 }
 
 .admin-panel-content.login-mode {
@@ -358,6 +360,10 @@ body[data-theme="dark"] .theme-icon-moon {
 
 .admin-panel-content.admin-mode {
     max-width: 980px;
+}
+
+.admin-panel-content.animate-in {
+    animation: panelZoomIn 0.25s ease;
 }
 
 .admin-panel-content::-webkit-scrollbar {
@@ -417,10 +423,35 @@ body[data-theme="dark"] .theme-icon-moon {
     color: var(--muted);
     cursor: pointer;
     line-height: 1;
+    transition: 0.2s ease;
+}
+
+.close-btn:hover {
+    color: var(--text);
+    transform: rotate(90deg);
+}
+
+.login-block,
+.admin-controls {
+    transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
 .login-block {
     padding: 22px 28px 28px;
+}
+
+.login-block.fade-out,
+.admin-controls.fade-out {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+}
+
+.login-block.fade-in,
+.admin-controls.fade-in {
+    opacity: 1;
+    transform: translateY(0);
+    animation: fadeSlideUp 0.22s ease;
 }
 
 .login-block label {
@@ -468,6 +499,26 @@ body[data-theme="dark"] .theme-icon-moon {
     background: var(--primary-hover);
 }
 
+.primary-btn.loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.88;
+}
+
+.primary-btn.loading::after {
+    content: "";
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    width: 15px;
+    height: 15px;
+    margin-top: -7.5px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    animation: spinLoader 0.7s linear infinite;
+}
+
 .secondary-btn,
 .danger-btn {
     width: 100%;
@@ -499,13 +550,18 @@ body[data-theme="dark"] .theme-icon-moon {
 }
 
 .error-message {
-    min-height: 18px;
+    display: none;
     margin-top: 10px;
     font-size: 13px;
     color: var(--error-text);
     background: var(--error-bg);
     border-radius: 8px;
-    padding: 8px 10px;
+    padding: 10px 12px;
+    animation: fadeSlideUp 0.22s ease;
+}
+
+.error-message.show {
+    display: block;
 }
 
 .admin-controls {
@@ -650,6 +706,46 @@ body[data-theme="dark"] .theme-icon-moon {
     display: block;
     background: var(--error-bg);
     color: var(--error-text);
+}
+
+@keyframes spinLoader {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes panelFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes panelZoomIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes fadeSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @media (max-width: 768px) {
