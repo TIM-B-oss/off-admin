@@ -49,6 +49,68 @@ function showMessage(text, type = "success") {
     }, 4000);
 }
 
+function showLoginError(text) {
+    const loginError = document.getElementById("loginError");
+    if (!loginError) return;
+
+    loginError.textContent = text;
+    loginError.classList.add("show");
+}
+
+function hideLoginError() {
+    const loginError = document.getElementById("loginError");
+    if (!loginError) return;
+
+    loginError.textContent = "";
+    loginError.classList.remove("show");
+}
+
+function setLoginButtonLoading(isLoading) {
+    if (!loginBtn) return;
+
+    if (isLoading) {
+        loginBtn.classList.add("loading");
+        loginBtn.dataset.originalText = loginBtn.textContent;
+        loginBtn.textContent = "Вход...";
+        loginBtn.disabled = true;
+    } else {
+        loginBtn.classList.remove("loading");
+        loginBtn.textContent = loginBtn.dataset.originalText || "Войти";
+        loginBtn.disabled = false;
+    }
+}
+
+function animatePanelOpen() {
+    if (!adminPanelContent) return;
+
+    adminPanelContent.classList.remove("animate-in");
+    void adminPanelContent.offsetWidth;
+    adminPanelContent.classList.add("animate-in");
+}
+
+function animateLoginSuccess() {
+    return new Promise((resolve) => {
+        const loginForm = document.getElementById("loginForm");
+        const adminControls = document.getElementById("adminControls");
+
+        if (!loginForm || !adminControls) {
+            resolve();
+            return;
+        }
+
+        loginForm.classList.remove("fade-in");
+        loginForm.classList.add("fade-out");
+
+        setTimeout(() => {
+            loginForm.style.display = "none";
+            adminControls.style.display = "block";
+            adminControls.classList.remove("fade-out");
+            adminControls.classList.add("fade-in");
+            resolve();
+        }, 220);
+    });
+}
+
 function makeSafeDocId(value) {
     return value.trim().replace(/\s+/g, "_");
 }
@@ -318,14 +380,11 @@ function updateCurrentUserInfo() {
     currentUserInfo.textContent = `${currentPanelUser["имя"] || "Без имени"} (${currentPanelUser["логин"] || ""}) — ${currentPanelUser["роль"] || "Без роли"}`;
 }
 
-function setLoggedInState() {
+async function setLoggedInState(animated = false) {
     const loginForm = document.getElementById("loginForm");
     const adminControls = document.getElementById("adminControls");
-    const loginError = document.getElementById("loginError");
 
-    if (loginForm) loginForm.style.display = "none";
-    if (adminControls) adminControls.style.display = "block";
-    if (loginError) loginError.textContent = "";
+    hideLoginError();
 
     if (adminPanelContent) {
         adminPanelContent.classList.remove("login-mode");
@@ -333,6 +392,20 @@ function setLoggedInState() {
     }
 
     updateCurrentUserInfo();
+
+    if (animated) {
+        await animateLoginSuccess();
+    } else {
+        if (loginForm) {
+            loginForm.style.display = "none";
+            loginForm.classList.remove("fade-out");
+        }
+        if (adminControls) {
+            adminControls.style.display = "block";
+            adminControls.classList.remove("fade-out");
+            adminControls.classList.add("fade-in");
+        }
+    }
 }
 
 function setLoggedOutState() {
@@ -340,13 +413,23 @@ function setLoggedOutState() {
     const adminControls = document.getElementById("adminControls");
     const loginInput = document.getElementById("adminLogin");
     const passwordInput = document.getElementById("adminPassword");
-    const loginError = document.getElementById("loginError");
 
-    if (loginForm) loginForm.style.display = "block";
-    if (adminControls) adminControls.style.display = "none";
+    if (loginForm) {
+        loginForm.style.display = "block";
+        loginForm.classList.remove("fade-out");
+        loginForm.classList.add("fade-in");
+    }
+
+    if (adminControls) {
+        adminControls.style.display = "none";
+        adminControls.classList.remove("fade-in");
+        adminControls.classList.remove("fade-out");
+    }
+
     if (loginInput) loginInput.value = "";
     if (passwordInput) passwordInput.value = "";
-    if (loginError) loginError.textContent = "";
+
+    hideLoginError();
 
     if (adminPanelContent) {
         adminPanelContent.classList.remove("admin-mode");
@@ -430,11 +513,12 @@ if (serverBadgeBtn) {
 if (openAdminPanelBtn) {
     openAdminPanelBtn.addEventListener("click", () => {
         adminPanel.style.display = "flex";
+        animatePanelOpen();
 
         const savedUser = localStorage.getItem(ADMIN_SESSION_KEY);
         if (savedUser) {
             currentPanelUser = JSON.parse(savedUser);
-            setLoggedInState();
+            setLoggedInState(false);
         } else {
             setLoggedOutState();
         }
@@ -459,33 +543,39 @@ if (loginBtn) {
     loginBtn.addEventListener("click", async () => {
         const loginInput = document.getElementById("adminLogin");
         const passwordInput = document.getElementById("adminPassword");
-        const loginError = document.getElementById("loginError");
 
         const login = loginInput?.value.trim();
         const password = passwordInput?.value.trim();
 
+        hideLoginError();
+
         if (!login || !password) {
-            loginError.textContent = "Введите логин и пароль";
+            showLoginError("Введите логин и пароль");
             return;
         }
+
+        setLoginButtonLoading(true);
 
         try {
             const doc = await db.collection("panel_users").doc(login).get();
 
             if (!doc.exists) {
-                loginError.textContent = "Пользователь не найден";
+                showLoginError("Пользователь не найден");
+                setLoginButtonLoading(false);
                 return;
             }
 
             const userData = doc.data() || {};
 
             if (userData["активен"] === false) {
-                loginError.textContent = "Этот аккаунт отключён";
+                showLoginError("Этот аккаунт отключён");
+                setLoginButtonLoading(false);
                 return;
             }
 
             if ((userData["пароль"] || "") !== password) {
-                loginError.textContent = "Неверный пароль";
+                showLoginError("Неверный пароль");
+                setLoginButtonLoading(false);
                 return;
             }
 
@@ -496,12 +586,15 @@ if (loginBtn) {
             };
 
             localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(currentPanelUser));
-            setLoggedInState();
+
+            await setLoggedInState(true);
             activateTab("admins");
             await addLoginLog(currentPanelUser, "Вход в админ-панель");
         } catch (error) {
             console.error("Ошибка входа:", error);
-            loginError.textContent = "Ошибка входа";
+            showLoginError("Ошибка входа");
+        } finally {
+            setLoginButtonLoading(false);
         }
     });
 }
