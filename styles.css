@@ -363,7 +363,7 @@ body[data-theme="dark"] .theme-icon-moon {
 }
 
 .admin-panel-content.animate-in {
-    animation: panelZoomIn 0.25s ease;
+    animation: panelZoomIn 0.28s ease;
 }
 
 .admin-panel-content::-webkit-scrollbar {
@@ -729,7 +729,7 @@ body[data-theme="dark"] .theme-icon-moon {
 @keyframes panelZoomIn {
     from {
         opacity: 0;
-        transform: translateY(12px) scale(0.96);
+        transform: translateY(16px) scale(0.95);
     }
     to {
         opacity: 1;
