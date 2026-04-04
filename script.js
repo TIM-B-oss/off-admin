@@ -73,40 +73,6 @@ function mapAdminFromDoc(doc) {
     };
 }
 
-function getStatusPriority(status) {
-    const value = (status || "").toLowerCase().trim();
-
-    if (value.includes("основатель")) return 1;
-
-    if (
-        value.includes("ген.дир") ||
-        value.includes("ген дир") ||
-        value.includes("ген.директор") ||
-        value.includes("ген директор") ||
-        value.includes("ген.дир №") ||
-        value.includes("ген дир №")
-    ) return 2;
-
-    if (
-        value.includes("зам.ген.дир") ||
-        value.includes("зам ген.дир") ||
-        value.includes("зам ген дир") ||
-        value.includes("зам.ген дир") ||
-        value.includes("зам основателя")
-    ) return 3;
-
-    if (value === "са" || value.includes("спец администратор") || value.includes("с.а")) return 4;
-    if (value.includes("рук") || value.includes("руковод")) return 5;
-    if (value === "га" || value.startsWith("га ") || value.includes(" га")) return 6;
-    if (value.includes("зга")) return 7;
-    if (value.includes("куратор")) return 8;
-    if (value.includes("згс")) return 10;
-    if (value.includes("гс")) return 9;
-    if (value.includes("след")) return 11;
-
-    return 999;
-}
-
 function sortAdmins(admins) {
     return [...admins].sort((a, b) => {
         const orderA = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
@@ -114,20 +80,6 @@ function sortAdmins(admins) {
 
         if (orderA !== orderB) {
             return orderA - orderB;
-        }
-
-        const priorityA = getStatusPriority(a.status);
-        const priorityB = getStatusPriority(b.status);
-
-        if (priorityA !== priorityB) {
-            return priorityA - priorityB;
-        }
-
-        const levelA = Number(a.level) || 0;
-        const levelB = Number(b.level) || 0;
-
-        if (levelA !== levelB) {
-            return levelB - levelA;
         }
 
         return (a.nickname || "").localeCompare((b.nickname || ""), "ru");
