@@ -259,9 +259,9 @@ async function loadLoginLogs() {
 
 async function addLoginLog(userData, action = "Вход в админ-панель") {
     try {
-        const login = (userData["логин"] || "user").replace(/\s+/g, "_");
-
+        const login = makeSafeDocId(userData["логин"] || "user");
         const now = new Date();
+
         const day = String(now.getDate()).padStart(2, "0");
         const month = String(now.getMonth() + 1).padStart(2, "0");
         const year = now.getFullYear();
