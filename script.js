@@ -20,6 +20,7 @@ const MAX_LEVEL = 8;
 let allAdmins = [];
 let currentEditingAdmin = null;
 let currentPanelUser = null;
+let isPanelClosing = false;
 
 const adminPanel = document.getElementById("adminPanel");
 const adminPanelContent = document.getElementById("adminPanelContent");
@@ -81,11 +82,43 @@ function setLoginButtonLoading(isLoading) {
 }
 
 function animatePanelOpen() {
-    if (!adminPanelContent) return;
+    if (!adminPanel || !adminPanelContent) return;
 
-    adminPanelContent.classList.remove("animate-in");
+    adminPanel.classList.remove("closing");
+    adminPanelContent.classList.remove("closing");
+
+    adminPanel.style.animation = "none";
+    adminPanelContent.style.animation = "none";
+
+    void adminPanel.offsetWidth;
     void adminPanelContent.offsetWidth;
-    adminPanelContent.classList.add("animate-in");
+
+    adminPanel.style.animation = "panelFadeIn 0.24s ease";
+    adminPanelContent.style.animation = "panelZoomIn 0.28s ease";
+}
+
+function animatePanelClose() {
+    return new Promise((resolve) => {
+        if (!adminPanel || !adminPanelContent || isPanelClosing) {
+            resolve();
+            return;
+        }
+
+        isPanelClosing = true;
+
+        adminPanel.classList.add("closing");
+        adminPanelContent.classList.add("closing");
+
+        setTimeout(() => {
+            adminPanel.style.display = "none";
+            adminPanel.classList.remove("closing");
+            adminPanelContent.classList.remove("closing");
+            adminPanel.style.animation = "";
+            adminPanelContent.style.animation = "";
+            isPanelClosing = false;
+            resolve();
+        }, 220);
+    });
 }
 
 function animateLoginSuccess() {
@@ -526,15 +559,15 @@ if (openAdminPanelBtn) {
 }
 
 if (closeAdminPanelBtn) {
-    closeAdminPanelBtn.addEventListener("click", () => {
-        adminPanel.style.display = "none";
+    closeAdminPanelBtn.addEventListener("click", async () => {
+        await animatePanelClose();
     });
 }
 
 if (adminPanel) {
-    adminPanel.addEventListener("click", (e) => {
+    adminPanel.addEventListener("click", async (e) => {
         if (e.target === adminPanel) {
-            adminPanel.style.display = "none";
+            await animatePanelClose();
         }
     });
 }
