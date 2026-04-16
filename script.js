@@ -29,8 +29,7 @@ id:doc.id,
 nickname:doc.id,
 level:d["уровень"]||"",
 status:d["статус"]||"",
-vk:d["вк"]||"",
-city:d["город"]||""
+vk:d["вк"]||""
 };
 });
 
@@ -40,17 +39,21 @@ renderAdmins(allAdmins);
 function renderAdmins(admins){
 const tbody=document.getElementById("adminTableBody");
 tbody.innerHTML="";
+
 if(!admins.length){
-tbody.innerHTML="<tr><td colspan='4'>Нет администраторов</td></tr>";
+tbody.innerHTML=`<tr class="empty-row">
+<td colspan="4">Нет администраторов</td>
+</tr>`;
 return;
 }
+
 admins.forEach(a=>{
 tbody.innerHTML+=`
 <tr>
-<td>${a.nickname}</td>
-<td>${a.level}</td>
-<td>${a.status}</td>
-<td>${a.vk?`<a href="${a.vk}" target="_blank">VK</a>`:"—"}</td>
+<td class="nickname-cell">${a.nickname}</td>
+<td class="level-cell">${a.level}</td>
+<td><span class="status-tag">${a.status}</span></td>
+<td>${a.vk?`<a class="vk-btn" href="${a.vk}" target="_blank">VK</a>`:"—"}</td>
 </tr>`;
 });
 }
@@ -70,7 +73,6 @@ const nickname=document.getElementById("addNickname").value.trim();
 const level=document.getElementById("addLevel").value;
 const status=document.getElementById("addStatus").value.trim();
 const vk=document.getElementById("addVk").value.trim();
-
 if(!nickname||!level||!status)return;
 
 await db.collection("admins").doc(makeSafeDocId(nickname)).set({
@@ -102,46 +104,6 @@ await db.collection("admins").doc(makeSafeDocId(parts[0])).set({
 });
 }
 
-await loadAdmins();
-});
-
-document.getElementById("loadAdminBtn").addEventListener("click",async()=>{
-const nick=document.getElementById("editNicknameSearch").value.trim();
-if(!nick)return;
-
-const doc=await db.collection("admins").doc(makeSafeDocId(nick)).get();
-if(!doc.exists)return;
-
-const d=doc.data();
-document.getElementById("editFields").style.display="block";
-document.getElementById("editNickname").value=doc.id;
-document.getElementById("editLevel").value=d["уровень"];
-document.getElementById("editStatus").value=d["статус"];
-document.getElementById("editVk").value=d["вк"];
-document.getElementById("editCity").value=d["город"];
-});
-
-document.getElementById("updateAdminBtn").addEventListener("click",async()=>{
-const nickname=document.getElementById("editNickname").value.trim();
-const level=document.getElementById("editLevel").value;
-const status=document.getElementById("editStatus").value.trim();
-const vk=document.getElementById("editVk").value.trim();
-const city=document.getElementById("editCity").value;
-
-await db.collection("admins").doc(makeSafeDocId(nickname)).set({
-"уровень":Number(level),
-"статус":status,
-"вк":vk,
-"город":city
-});
-
-await loadAdmins();
-});
-
-document.getElementById("deleteAdminBtn").addEventListener("click",async()=>{
-const nickname=document.getElementById("editNickname").value.trim();
-await db.collection("admins").doc(makeSafeDocId(nickname)).delete();
-document.getElementById("editFields").style.display="none";
 await loadAdmins();
 });
 
