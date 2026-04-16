@@ -4,15 +4,14 @@ const firebaseConfig = {
     projectId: "admin-panel-site-c6658",
     storageBucket: "admin-panel-site-c6658.firebasestorage.app",
     messagingSenderId: "1007133132643",
-    appId: "1:1007133132643:web:d8f203b6736fef5879b556"
+    appId: "1:1007133132643:web:d8f203b6736fef5879b556",
+    measurementId: "G-GFPJ1MLCZ5"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-/* ============================= */
-/*          КОНСТАНТЫ            */
-/* ============================= */
+/* ===================== КОНСТАНТЫ ===================== */
 
 const THEME_STORAGE_KEY = "siteTheme";
 const ADMIN_SESSION_KEY = "panelCurrentUser";
@@ -26,14 +25,14 @@ const SERVERS = {
 const MIN_LEVEL = 1;
 const MAX_LEVEL = 8;
 
+/* ===================== СОСТОЯНИЕ ===================== */
+
 let currentServer = localStorage.getItem(SERVER_STORAGE_KEY) || "spb";
 let allAdmins = [];
 let currentEditingAdmin = null;
 let currentPanelUser = null;
 
-/* ============================= */
-/*        DOM ЭЛЕМЕНТЫ           */
-/* ============================= */
+/* ===================== DOM ===================== */
 
 const adminPanel = document.getElementById("adminPanel");
 const adminPanelContent = document.getElementById("adminPanelContent");
@@ -45,17 +44,19 @@ const themeToggleBtn = document.getElementById("themeToggleBtn");
 const searchInput = document.getElementById("searchInput");
 const serverBadgeBtn = document.getElementById("serverBadgeBtn");
 
-/* ============================= */
-/*        ВСПОМОГАТЕЛЬНОЕ        */
-/* ============================= */
+/* ===================== УТИЛИТЫ ===================== */
 
 function showMessage(text, type = "success") {
     const el = document.getElementById("actionMessage");
     if (!el) return;
+
     el.textContent = text;
     el.className = `action-message ${type}`;
     el.style.display = "block";
-    setTimeout(() => el.style.display = "none", 4000);
+
+    setTimeout(() => {
+        el.style.display = "none";
+    }, 4000);
 }
 
 function makeSafeDocId(value) {
@@ -73,14 +74,13 @@ function sortAdmins(admins) {
     return [...admins].sort((a, b) => {
         const orderA = Number(a.sortOrder) || 999999;
         const orderB = Number(b.sortOrder) || 999999;
+
         if (orderA !== orderB) return orderA - orderB;
-        return a.nickname.localeCompare(b.nickname, "ru");
+        return (a.nickname || "").localeCompare((b.nickname || ""), "ru");
     });
 }
 
-/* ============================= */
-/*         СЕРВЕРЫ               */
-/* ============================= */
+/* ===================== СЕРВЕР ===================== */
 
 function updateServerBadge() {
     if (!serverBadgeBtn) return;
@@ -92,16 +92,14 @@ async function switchServer() {
     localStorage.setItem(SERVER_STORAGE_KEY, currentServer);
     updateServerBadge();
     await loadAdmins();
-    showMessage(`Выбран сервер: ${SERVERS[currentServer]}`);
+    showMessage(`Выбран сервер: ${SERVERS[currentServer]}`, "success");
 }
 
 if (serverBadgeBtn) {
     serverBadgeBtn.addEventListener("click", switchServer);
 }
 
-/* ============================= */
-/*        ЗАГРУЗКА АДМИНОВ       */
-/* ============================= */
+/* ===================== ЗАГРУЗКА АДМИНОВ ===================== */
 
 function mapAdminFromDoc(doc) {
     const data = doc.data() || {};
@@ -125,7 +123,7 @@ async function loadAdmins() {
         allAdmins = sortAdmins(snapshot.docs.map(mapAdminFromDoc));
         renderAdmins(allAdmins);
     } catch (error) {
-        console.error(error);
+        console.error("Ошибка загрузки:", error);
         renderAdmins([]);
     }
 }
@@ -137,19 +135,25 @@ function renderAdmins(admins) {
     tbody.innerHTML = "";
 
     if (!admins.length) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="4">Нет администраторов</td></tr>`;
+        tbody.innerHTML = `
+            <tr class="empty-row">
+                <td colspan="4">Нет администраторов</td>
+            </tr>
+        `;
         return;
     }
 
-    admins.forEach(admin => {
+    admins.forEach((admin) => {
         const row = document.createElement("tr");
 
         row.innerHTML = `
-            <td class="nickname-cell">${admin.nickname}</td>
-            <td class="level-cell">${admin.level}</td>
-            <td><span class="status-tag">${admin.status}</span></td>
+            <td class="nickname-cell">${admin.nickname || "-"}</td>
+            <td class="level-cell">${admin.level ?? "-"}</td>
+            <td><span class="status-tag">${admin.status || "-"}</span></td>
             <td>
-                ${admin.vk ? `<a href="${admin.vk}" target="_blank" class="vk-btn">VK</a>` : "—"}
+                ${admin.vk
+                    ? `<a href="${admin.vk}" target="_blank" rel="noopener noreferrer" class="vk-btn">VK</a>`
+                    : "—"}
             </td>
         `;
 
@@ -157,9 +161,7 @@ function renderAdmins(admins) {
     });
 }
 
-/* ============================= */
-/*          ДОБАВЛЕНИЕ           */
-/* ============================= */
+/* ===================== ДОБАВЛЕНИЕ ===================== */
 
 const addAdminBtn = document.getElementById("addAdminBtn");
 
@@ -171,13 +173,19 @@ if (addAdminBtn) {
         const vk = document.getElementById("addVk").value.trim();
 
         if (!nickname || !level || !status) {
-            showMessage("Заполните обязательные поля", "error");
+            showMessage("Заполните обязательные поля. Уровень 1-8", "error");
             return;
         }
 
         const docId = makeSafeDocId(nickname);
 
         try {
+            const existing = await db.collection("admins").doc(docId).get();
+            if (existing.exists) {
+                showMessage("Администратор уже существует", "error");
+                return;
+            }
+
             await db.collection("admins").doc(docId).set({
                 "уровень": level,
                 "статус": status,
@@ -188,24 +196,32 @@ if (addAdminBtn) {
             });
 
             await loadAdmins();
-            showMessage("Администратор добавлен");
+
+            document.getElementById("addNickname").value = "";
+            document.getElementById("addLevel").value = "";
+            document.getElementById("addStatus").value = "";
+            document.getElementById("addVk").value = "";
+
+            showMessage("Администратор добавлен", "success");
         } catch (error) {
-            console.error(error);
+            console.error("Ошибка добавления:", error);
             showMessage("Ошибка добавления", "error");
         }
     });
 }
 
-/* ============================= */
-/*         ПОИСК                 */
-/* ============================= */
+/* ===================== ПОИСК ===================== */
 
 function filterAdmins() {
-    const value = (searchInput?.value || "").toLowerCase();
-    if (!value) return renderAdmins(allAdmins);
+    const value = (searchInput?.value || "").toLowerCase().trim();
 
-    const filtered = allAdmins.filter(a =>
-        a.nickname.toLowerCase().includes(value)
+    if (!value) {
+        renderAdmins(allAdmins);
+        return;
+    }
+
+    const filtered = allAdmins.filter(admin =>
+        (admin.nickname || "").toLowerCase().includes(value)
     );
 
     renderAdmins(filtered);
@@ -215,30 +231,29 @@ if (searchInput) {
     searchInput.addEventListener("input", filterAdmins);
 }
 
-/* ============================= */
-/*          ТЕМА                 */
-/* ============================= */
+/* ===================== ТЕМА ===================== */
 
 function applyTheme(theme) {
-    document.body.setAttribute("data-theme", theme);
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    const finalTheme = theme === "dark" ? "dark" : "light";
+    document.body.setAttribute("data-theme", finalTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, finalTheme);
 }
 
 function toggleTheme() {
-    const current = document.body.getAttribute("data-theme") || "light";
-    applyTheme(current === "dark" ? "light" : "dark");
+    const currentTheme = document.body.getAttribute("data-theme") || "light";
+    applyTheme(currentTheme === "dark" ? "light" : "dark");
 }
 
 if (themeToggleBtn) {
     themeToggleBtn.addEventListener("click", toggleTheme);
 }
 
-/* ============================= */
-/*          ИНИЦИАЛИЗАЦИЯ        */
-/* ============================= */
+/* ===================== ИНИЦИАЛИЗАЦИЯ ===================== */
 
 document.addEventListener("DOMContentLoaded", async () => {
-    applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "light");
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || "light";
+    applyTheme(savedTheme);
+
     updateServerBadge();
     await loadAdmins();
 });
