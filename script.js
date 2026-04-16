@@ -1,20 +1,33 @@
 const firebaseConfig = {
 apiKey: "AIzaSyC3uqEIX7Zee5_T9NAp5impPdK2nCPYIFo",
 authDomain: "admin-panel-site-c6658.firebaseapp.com",
-projectId: "admin-panel-site-c6658",
-storageBucket: "admin-panel-site-c6658.firebasestorage.app",
-messagingSenderId: "1007133132643",
-appId: "1:1007133132643:web:d8f203b6736fef5879b556"
+projectId: "admin-panel-site-c6658"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-let currentCity = "spb";
+const SERVER_STORAGE_KEY = "selectedServer";
+
+let currentCity = localStorage.getItem(SERVER_STORAGE_KEY) || "spb";
 let allAdmins = [];
 
 function makeSafeDocId(value){
 return value.trim().replace(/\s+/g,"_");
+}
+
+function setActiveServerButton(){
+document.querySelectorAll(".server-btn").forEach(btn=>{
+btn.classList.remove("active");
+if(btn.dataset.city===currentCity){
+btn.classList.add("active");
+}
+});
+}
+
+function syncSelects(){
+document.getElementById("addCity").value=currentCity;
+document.getElementById("bulkCity").value=currentCity;
 }
 
 async function loadAdmins(){
@@ -25,7 +38,6 @@ const snapshot = await db.collection("admins")
 allAdmins = snapshot.docs.map(doc=>{
 const d = doc.data();
 return{
-id:doc.id,
 nickname:doc.id,
 level:d["уровень"]||"",
 status:d["статус"]||"",
@@ -60,15 +72,15 @@ tbody.innerHTML+=`
 
 document.querySelectorAll(".server-btn").forEach(btn=>{
 btn.addEventListener("click",async()=>{
-document.querySelectorAll(".server-btn").forEach(b=>b.classList.remove("active"));
-btn.classList.add("active");
 currentCity=btn.dataset.city;
+localStorage.setItem(SERVER_STORAGE_KEY,currentCity);
+setActiveServerButton();
+syncSelects();
 await loadAdmins();
 });
 });
 
 document.getElementById("addAdminBtn").addEventListener("click",async()=>{
-const city=document.getElementById("addCity").value;
 const nickname=document.getElementById("addNickname").value.trim();
 const level=document.getElementById("addLevel").value;
 const status=document.getElementById("addStatus").value.trim();
@@ -79,14 +91,13 @@ await db.collection("admins").doc(makeSafeDocId(nickname)).set({
 "уровень":Number(level),
 "статус":status,
 "вк":vk||"",
-"город":city
+"город":currentCity
 });
 
 await loadAdmins();
 });
 
 document.getElementById("bulkImportBtn").addEventListener("click",async()=>{
-const city=document.getElementById("bulkCity").value;
 const text=document.getElementById("bulkAdminText").value.trim();
 if(!text)return;
 
@@ -100,7 +111,7 @@ await db.collection("admins").doc(makeSafeDocId(parts[0])).set({
 "уровень":Number(parts[1]),
 "статус":parts[2],
 "вк":parts[3],
-"город":city
+"город":currentCity
 });
 }
 
@@ -115,4 +126,8 @@ document.getElementById("closeAdminPanel").onclick=()=>{
 document.getElementById("adminPanel").style.display="none";
 };
 
-document.addEventListener("DOMContentLoaded",loadAdmins);
+document.addEventListener("DOMContentLoaded",async()=>{
+setActiveServerButton();
+syncSelects();
+await loadAdmins();
+});
