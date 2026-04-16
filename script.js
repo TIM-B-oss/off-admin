@@ -13,91 +13,105 @@ const db = firebase.firestore();
 
 let currentServer = "spb"; // По умолчанию Невский
 let allAdmins = [];
+let currentPanelUser = null;
 
-// ЗАГРУЗКА ДАННЫХ
+// 1. ЗАГРУЗКА ДАННЫХ
 async function loadAdmins() {
-    const snapshot = await db.collection("admins").get();
-    allAdmins = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    renderTable();
+    try {
+        const snapshot = await db.collection("admins").get();
+        allAdmins = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        filterAndRender();
+    } catch (e) { console.error("Ошибка загрузки:", e); }
 }
 
-function renderTable() {
+function filterAndRender() {
     const tbody = document.getElementById("adminTableBody");
     const search = document.getElementById("searchInput").value.toLowerCase();
     
     tbody.innerHTML = "";
-    
+
+    // Фильтруем: сервер должен совпадать, либо (если сервера нет в базе) считаем его за spb
     const filtered = allAdmins.filter(a => {
-        // Если у админа нет поля город, считаем его за Невский (spb)
-        const city = a.город || "spb";
-        return city === currentServer && a.id.toLowerCase().includes(search);
+        const adminCity = a.город || "spb"; // Важно: старые админы без города станут spb
+        return adminCity === currentServer && a.id.toLowerCase().includes(search);
     });
 
+    // Сортировка по полю "порядок"
     filtered.sort((a, b) => (a.порядок || 99) - (b.порядок || 99));
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#9ca3af;">Нет администраторов</td></tr>';
+        return;
+    }
 
     filtered.forEach(admin => {
         tbody.innerHTML += `
             <tr>
                 <td class="nickname-cell">${admin.id}</td>
-                <td class="level-cell">${admin.уровень} LVL</td>
-                <td><span class="status-tag">${admin.статус}</span></td>
-                <td><a href="${admin.вк}" target="_blank" class="vk-btn">VK</a></td>
+                <td class="level-cell">${admin.уровень || 0} LVL</td>
+                <td><span class="status-tag">${admin.статус || '—'}</span></td>
+                <td><a href="${admin.вк || '#'}" target="_blank" class="vk-btn">VK</a></td>
             </tr>
         `;
     });
 }
 
-// ПЕРЕКЛЮЧЕНИЕ СЕРВЕРА
+// 2. ПЕРЕКЛЮЧЕНИЕ СЕРВЕРОВ
 document.getElementById("btnSpb").onclick = () => {
     currentServer = "spb";
     document.getElementById("btnSpb").classList.add("active");
     document.getElementById("btnEkb").classList.remove("active");
-    renderTable();
+    filterAndRender();
 };
 
 document.getElementById("btnEkb").onclick = () => {
     currentServer = "ekb";
     document.getElementById("btnEkb").classList.add("active");
     document.getElementById("btnSpb").classList.remove("active");
-    renderTable();
+    filterAndRender();
 };
 
-// ПОИСК
-document.getElementById("searchInput").oninput = renderTable;
-
-// ТЕМА
+// 3. ПОИСК И ТЕМА
+document.getElementById("searchInput").oninput = filterAndRender;
 document.getElementById("themeToggleBtn").onclick = () => {
     const theme = document.body.getAttribute("data-theme") === "dark" ? "light" : "dark";
     document.body.setAttribute("data-theme", theme);
 };
 
-// АДМИН ПАНЕЛЬ (Вход)
-document.getElementById("openAdminPanelBtn").onclick = () => {
-    document.getElementById("adminPanel").style.display = "flex";
-};
-document.getElementById("closeAdminPanel").onclick = () => {
-    document.getElementById("adminPanel").style.display = "none";
-};
+// 4. АДМИН-ПАНЕЛЬ
+const adminPanel = document.getElementById("adminPanel");
+document.getElementById("openAdminPanelBtn").onclick = () => adminPanel.style.display = "flex";
+document.getElementById("closeAdminPanel").onclick = () => adminPanel.style.display = "none";
 
+// Вход
 document.getElementById("loginBtn").onclick = async () => {
-    const login = document.getElementById("adminLogin").value;
-    const pass = document.getElementById("adminPassword").value;
-    const doc = await db.collection("panel_users").doc(login).get();
+    const log = document.getElementById("adminLogin").value;
+    const pas = document.getElementById("adminPassword").value;
+    const doc = await db.collection("panel_users").doc(log).get();
 
-    if (doc.exists && doc.data().пароль === pass) {
+    if (doc.exists && doc.data().пароль === pas) {
+        currentPanelUser = doc.data();
         document.getElementById("loginForm").style.display = "none";
         document.getElementById("adminControls").style.display = "block";
-        document.getElementById("adminPanelContent").className = "admin-panel-content admin-mode";
-        document.getElementById("currentUserInfo").innerText = "Админ: " + doc.data().имя;
+        document.getElementById("adminPanelContent").classList.add("admin-mode");
+        document.getElementById("currentUserInfo").innerText = "Привет, " + currentPanelUser.имя;
     } else {
-        alert("Ошибка входа!");
+        document.getElementById("loginError").style.display = "block";
     }
 };
 
-// ДОБАВЛЕНИЕ
+// Выход
+document.getElementById("logoutBtn").onclick = () => location.reload();
+
+// Добавление
 document.getElementById("addAdminBtn").onclick = async () => {
-    const nick = document.getElementById("addNickname").value;
-    const city = document.getElementById("actionServer").value;
+    const nick = document.getElementById("addNickname").value.trim();
+    const city = document.getElementById("addAdminServer").value;
+    if(!nick) return alert("Введите ник");
+
     await db.collection("admins").doc(nick).set({
         уровень: document.getElementById("addLevel").value,
         статус: document.getElementById("addStatus").value,
@@ -105,64 +119,50 @@ document.getElementById("addAdminBtn").onclick = async () => {
         город: city,
         порядок: 99
     });
-    alert("Добавлен!");
+    alert("Администратор добавлен!");
     loadAdmins();
 };
 
-// ИМПОРТ
-document.getElementById("bulkImportBtn").onclick = async () => {
-    const text = document.getElementById("bulkAdminText").value;
-    const city = document.getElementById("actionServer").value;
-    const lines = text.split("\n");
-    for (let line of lines) {
-        const [n, l, s, v] = line.split("\t");
-        if (n) {
-            await db.collection("admins").doc(n.trim()).set({
-                уровень: l, статус: s, вк: v, город: city, порядок: 99
-            });
-        }
-    }
-    alert("Готово!");
-    loadAdmins();
-};
-
-// РЕДАКТИРОВАНИЕ
+// Редактирование
 let currentEditId = "";
 document.getElementById("loadAdminBtn").onclick = async () => {
-    const nick = document.getElementById("editNicknameSearch").value;
+    const nick = document.getElementById("editSearch").value.trim();
     const doc = await db.collection("admins").doc(nick).get();
-    if (doc.exists) {
-        const d = doc.data();
+    if(doc.exists) {
         currentEditId = doc.id;
+        const d = doc.data();
         document.getElementById("editNickname").value = doc.id;
         document.getElementById("editLevel").value = d.уровень;
         document.getElementById("editStatus").value = d.статус;
         document.getElementById("editVk").value = d.вк;
-        document.getElementById("editServer").value = d.город || "spb";
+        document.getElementById("editAdminServer").value = d.город || "spb";
         document.getElementById("editSortOrder").value = d.порядок || 99;
         document.getElementById("editFields").style.display = "block";
-    }
+    } else { alert("Не найден!"); }
 };
 
 document.getElementById("updateAdminBtn").onclick = async () => {
-    const newNick = document.getElementById("editNickname").value;
+    const newNick = document.getElementById("editNickname").value.trim();
     const data = {
         уровень: document.getElementById("editLevel").value,
         статус: document.getElementById("editStatus").value,
         вк: document.getElementById("editVk").value,
-        город: document.getElementById("editServer").value,
+        город: document.getElementById("editAdminServer").value,
         порядок: parseInt(document.getElementById("editSortOrder").value)
     };
-    if (newNick !== currentEditId) await db.collection("admins").doc(currentEditId).delete();
+    if(newNick !== currentEditId) await db.collection("admins").doc(currentEditId).delete();
     await db.collection("admins").doc(newNick).set(data);
     alert("Обновлено!");
     loadAdmins();
 };
 
 document.getElementById("deleteAdminBtn").onclick = async () => {
-    await db.collection("admins").doc(currentEditId).delete();
-    loadAdmins();
-    document.getElementById("editFields").style.display = "none";
+    if(confirm("Удалить?")) {
+        await db.collection("admins").doc(currentEditId).delete();
+        loadAdmins();
+        document.getElementById("editFields").style.display = "none";
+    }
 };
 
+// СТАРТ
 loadAdmins();
