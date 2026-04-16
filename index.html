@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Администрация</title>
-    <link rel="stylesheet" href="styles.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Администрация</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
+
 <div class="page">
 <header class="page-header">
 <div class="header-top">
@@ -20,6 +23,7 @@
 
 <main class="card">
 
+<!-- ПЕРЕКЛЮЧАТЕЛЬ СЕРВЕРОВ -->
 <div class="server-switch">
 <button class="server-btn active" data-city="spb">Невский</button>
 <button class="server-btn" data-city="ekb">Екатеринбург</button>
@@ -46,74 +50,54 @@
 </main>
 </div>
 
+<!-- FAB -->
+<button id="openAdminPanelBtn" class="admin-fab">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+<circle cx="12" cy="12" r="3"/>
+</svg>
+</button>
+
+<!-- АДМИН ПАНЕЛЬ -->
 <div id="adminPanel" class="admin-panel">
-<div id="adminPanelContent" class="admin-panel-content login-mode">
+<div class="admin-panel-content">
 
 <div class="admin-panel-header">
 <h2>Панель администратора</h2>
 <button id="closeAdminPanel" class="close-btn">&times;</button>
 </div>
 
-<div id="loginForm" class="login-block">
-<input type="text" id="adminLogin" placeholder="Логин" />
-<input type="password" id="adminPassword" placeholder="Пароль" />
-<button id="loginBtn" class="primary-btn">Войти</button>
-<p id="loginError" class="error-message"></p>
-</div>
-
-<div id="adminControls" class="admin-controls" style="display:none;">
+<div class="admin-controls">
 
 <div class="control-section">
 <h3>Массовое добавление</h3>
 
-<select id="bulkCity">
+<select id="bulkCity" class="server-select">
 <option value="spb">Невский</option>
 <option value="ekb">Екатеринбург</option>
 </select>
 
-<textarea id="bulkAdminText" rows="8"></textarea>
+<textarea id="bulkAdminText" rows="8" placeholder="Ник	Уровень	Статус	VK"></textarea>
 <button id="bulkImportBtn" class="primary-btn">Импортировать</button>
 </div>
 
 <div class="control-section">
 <h3>Добавить администратора</h3>
 
-<select id="addCity">
+<select id="addCity" class="server-select">
 <option value="spb">Невский</option>
 <option value="ekb">Екатеринбург</option>
 </select>
 
-<input type="text" id="addNickname" placeholder="Ник" />
-<input type="number" id="addLevel" placeholder="Уровень" />
+<input type="text" id="addNickname" placeholder="Игровой ник" />
+<input type="number" id="addLevel" placeholder="Уровень" min="1" max="8" />
 <input type="text" id="addStatus" placeholder="Статус" />
-<input type="text" id="addVk" placeholder="VK" />
+<input type="text" id="addVk" placeholder="VK ссылка" />
 <button id="addAdminBtn" class="primary-btn">Добавить</button>
 </div>
 
-<div class="control-section">
-<h3>Редактировать</h3>
-<input type="text" id="editNicknameSearch" placeholder="Введите ник" />
-<button id="loadAdminBtn" class="secondary-btn">Загрузить</button>
-
-<div id="editFields" style="display:none; margin-top:10px;">
-<select id="editCity">
-<option value="spb">Невский</option>
-<option value="ekb">Екатеринбург</option>
-</select>
-<input type="text" id="editNickname" />
-<input type="number" id="editLevel" />
-<input type="text" id="editStatus" />
-<input type="text" id="editVk" />
-<button id="updateAdminBtn" class="primary-btn">Обновить</button>
-<button id="deleteAdminBtn" class="danger-btn">Удалить</button>
-</div>
-</div>
-
 </div>
 </div>
 </div>
-
-<button id="openAdminPanelBtn" class="admin-fab">⚙</button>
 
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
