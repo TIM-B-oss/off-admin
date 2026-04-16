@@ -11,158 +11,975 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-let currentServer = "spb"; // По умолчанию Невский
-let allAdmins = [];
-let currentPanelUser = null;
+const SERVER_CITY = "spb";
+const THEME_STORAGE_KEY = "siteTheme";
+const ADMIN_SESSION_KEY = "panelCurrentUser";
+const MIN_LEVEL = 1;
+const MAX_LEVEL = 8;
 
-// 1. ЗАГРУЗКА ДАННЫХ
-async function loadAdmins() {
-    try {
-        const snapshot = await db.collection("admins").get();
-        allAdmins = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        filterAndRender();
-    } catch (e) { console.error("Ошибка загрузки:", e); }
+let allAdmins = [];
+let currentEditingAdmin = null;
+let currentPanelUser = null;
+let isPanelClosing = false;
+
+const adminPanel = document.getElementById("adminPanel");
+const adminPanelContent = document.getElementById("adminPanelContent");
+const openAdminPanelBtn = document.getElementById("openAdminPanelBtn");
+const closeAdminPanelBtn = document.getElementById("closeAdminPanel");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const themeToggleBtn = document.getElementById("themeToggleBtn");
+const searchInput = document.getElementById("searchInput");
+const serverBadgeBtn = document.getElementById("serverBadgeBtn");
+const adminsTabBtn = document.getElementById("adminsTabBtn");
+const logsTabBtn = document.getElementById("logsTabBtn");
+const adminsTab = document.getElementById("adminsTab");
+const logsTab = document.getElementById("logsTab");
+const clearLoginLogsBtn = document.getElementById("clearLoginLogsBtn");
+
+function showMessage(text, type = "success") {
+    const el = document.getElementById("actionMessage");
+    if (!el) return;
+
+    el.textContent = text;
+    el.className = `action-message ${type}`;
+    el.style.display = "block";
+
+    setTimeout(() => {
+        el.style.display = "none";
+    }, 4000);
 }
 
-function filterAndRender() {
+function showLoginError(text) {
+    const loginError = document.getElementById("loginError");
+    if (!loginError) return;
+
+    loginError.textContent = text;
+    loginError.classList.add("show");
+}
+
+function hideLoginError() {
+    const loginError = document.getElementById("loginError");
+    if (!loginError) return;
+
+    loginError.textContent = "";
+    loginError.classList.remove("show");
+}
+
+function setLoginButtonLoading(isLoading) {
+    if (!loginBtn) return;
+
+    if (isLoading) {
+        loginBtn.classList.add("loading");
+        loginBtn.dataset.originalText = loginBtn.textContent;
+        loginBtn.textContent = "Вход...";
+        loginBtn.disabled = true;
+    } else {
+        loginBtn.classList.remove("loading");
+        loginBtn.textContent = loginBtn.dataset.originalText || "Войти";
+        loginBtn.disabled = false;
+    }
+}
+
+function animatePanelOpen() {
+    if (!adminPanel || !adminPanelContent) return;
+
+    adminPanel.classList.remove("closing");
+    adminPanelContent.classList.remove("closing");
+
+    adminPanel.style.animation = "none";
+    adminPanelContent.style.animation = "none";
+
+    void adminPanel.offsetWidth;
+    void adminPanelContent.offsetWidth;
+
+    adminPanel.style.animation = "panelFadeIn 0.24s ease";
+    adminPanelContent.style.animation = "panelZoomIn 0.28s ease";
+}
+
+function animatePanelClose() {
+    return new Promise((resolve) => {
+        if (!adminPanel || !adminPanelContent || isPanelClosing) {
+            resolve();
+            return;
+        }
+
+        isPanelClosing = true;
+
+        adminPanel.classList.add("closing");
+        adminPanelContent.classList.add("closing");
+
+        setTimeout(() => {
+            adminPanel.style.display = "none";
+            adminPanel.classList.remove("closing");
+            adminPanelContent.classList.remove("closing");
+            adminPanel.style.animation = "";
+            adminPanelContent.style.animation = "";
+            isPanelClosing = false;
+            resolve();
+        }, 220);
+    });
+}
+
+function animateLoginSuccess() {
+    return new Promise((resolve) => {
+        const loginForm = document.getElementById("loginForm");
+        const adminControls = document.getElementById("adminControls");
+
+        if (!loginForm || !adminControls) {
+            resolve();
+            return;
+        }
+
+        loginForm.classList.remove("fade-in");
+        loginForm.classList.add("fade-out");
+
+        setTimeout(() => {
+            loginForm.style.display = "none";
+            adminControls.style.display = "block";
+            adminControls.classList.remove("fade-out");
+            adminControls.classList.add("fade-in");
+            resolve();
+        }, 220);
+    });
+}
+
+function makeSafeDocId(value) {
+    return value.trim().replace(/\s+/g, "_");
+}
+
+function normalizeLevel(value) {
+    const level = parseInt(value, 10);
+    if (!Number.isFinite(level)) return null;
+    if (level < MIN_LEVEL || level > MAX_LEVEL) return null;
+    return level;
+}
+
+function mapAdminFromDoc(doc) {
+    const data = doc.data() || {};
+    return {
+        id: doc.id,
+        nickname: doc.id,
+        level: data["уровень"] ?? "",
+        status: data["статус"] ?? "",
+        vk: data["вк"] ?? "",
+        city: data["город"] ?? "",
+        sortOrder: data["порядок"] ?? 999999
+    };
+}
+
+function sortAdmins(admins) {
+    return [...admins].sort((a, b) => {
+        const orderA = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
+        const orderB = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
+
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+
+        return (a.nickname || "").localeCompare((b.nickname || ""), "ru");
+    });
+}
+
+function renderAdmins(admins) {
     const tbody = document.getElementById("adminTableBody");
-    const search = document.getElementById("searchInput").value.toLowerCase();
-    
+    if (!tbody) return;
+
     tbody.innerHTML = "";
 
-    // Фильтруем: сервер должен совпадать, либо (если сервера нет в базе) считаем его за spb
-    const filtered = allAdmins.filter(a => {
-        const adminCity = a.город || "spb"; // Важно: старые админы без города станут spb
-        return adminCity === currentServer && a.id.toLowerCase().includes(search);
-    });
-
-    // Сортировка по полю "порядок"
-    filtered.sort((a, b) => (a.порядок || 99) - (b.порядок || 99));
-
-    if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#9ca3af;">Нет администраторов</td></tr>';
+    if (!admins.length) {
+        tbody.innerHTML = `
+            <tr class="empty-row">
+                <td colspan="4">Нет администраторов</td>
+            </tr>
+        `;
         return;
     }
 
-    filtered.forEach(admin => {
-        tbody.innerHTML += `
-            <tr>
-                <td class="nickname-cell">${admin.id}</td>
-                <td class="level-cell">${admin.уровень || 0} LVL</td>
-                <td><span class="status-tag">${admin.статус || '—'}</span></td>
-                <td><a href="${admin.вк || '#'}" target="_blank" class="vk-btn">VK</a></td>
-            </tr>
-        `;
+    admins.forEach((admin) => {
+        const row = document.createElement("tr");
+
+        const nicknameCell = document.createElement("td");
+        nicknameCell.className = "nickname-cell";
+        nicknameCell.textContent = admin.nickname || "-";
+
+        const levelCell = document.createElement("td");
+        levelCell.className = "level-cell";
+        levelCell.textContent = admin.level ?? "-";
+
+        const statusCell = document.createElement("td");
+        const statusTag = document.createElement("span");
+        statusTag.className = "status-tag";
+        statusTag.textContent = admin.status || "-";
+        statusCell.appendChild(statusTag);
+
+        const vkCell = document.createElement("td");
+        if (admin.vk) {
+            const link = document.createElement("a");
+            link.href = admin.vk;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.className = "vk-btn";
+            link.textContent = "VK";
+            vkCell.appendChild(link);
+        } else {
+            vkCell.textContent = "—";
+            vkCell.className = "muted-cell";
+        }
+
+        row.appendChild(nicknameCell);
+        row.appendChild(levelCell);
+        row.appendChild(statusCell);
+        row.appendChild(vkCell);
+
+        tbody.appendChild(row);
     });
 }
 
-// 2. ПЕРЕКЛЮЧЕНИЕ СЕРВЕРОВ
-document.getElementById("btnSpb").onclick = () => {
-    currentServer = "spb";
-    document.getElementById("btnSpb").classList.add("active");
-    document.getElementById("btnEkb").classList.remove("active");
-    filterAndRender();
-};
+function applyTheme(theme) {
+    const finalTheme = theme === "dark" ? "dark" : "light";
+    document.body.setAttribute("data-theme", finalTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, finalTheme);
+}
 
-document.getElementById("btnEkb").onclick = () => {
-    currentServer = "ekb";
-    document.getElementById("btnEkb").classList.add("active");
-    document.getElementById("btnSpb").classList.remove("active");
-    filterAndRender();
-};
+function toggleTheme() {
+    const currentTheme = document.body.getAttribute("data-theme") || "light";
+    applyTheme(currentTheme === "dark" ? "light" : "dark");
+}
 
-// 3. ПОИСК И ТЕМА
-document.getElementById("searchInput").oninput = filterAndRender;
-document.getElementById("themeToggleBtn").onclick = () => {
-    const theme = document.body.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    document.body.setAttribute("data-theme", theme);
-};
+function formatDateTime(value) {
+    if (!value) return "—";
 
-// 4. АДМИН-ПАНЕЛЬ
-const adminPanel = document.getElementById("adminPanel");
-document.getElementById("openAdminPanelBtn").onclick = () => adminPanel.style.display = "flex";
-document.getElementById("closeAdminPanel").onclick = () => adminPanel.style.display = "none";
-
-// Вход
-document.getElementById("loginBtn").onclick = async () => {
-    const log = document.getElementById("adminLogin").value;
-    const pas = document.getElementById("adminPassword").value;
-    const doc = await db.collection("panel_users").doc(log).get();
-
-    if (doc.exists && doc.data().пароль === pas) {
-        currentPanelUser = doc.data();
-        document.getElementById("loginForm").style.display = "none";
-        document.getElementById("adminControls").style.display = "block";
-        document.getElementById("adminPanelContent").classList.add("admin-mode");
-        document.getElementById("currentUserInfo").innerText = "Привет, " + currentPanelUser.имя;
+    let date;
+    if (value.toDate) {
+        date = value.toDate();
     } else {
-        document.getElementById("loginError").style.display = "block";
+        date = new Date(value);
     }
-};
 
-// Выход
-document.getElementById("logoutBtn").onclick = () => location.reload();
+    if (isNaN(date.getTime())) return "—";
+    return date.toLocaleString("ru-RU");
+}
 
-// Добавление
-document.getElementById("addAdminBtn").onclick = async () => {
-    const nick = document.getElementById("addNickname").value.trim();
-    const city = document.getElementById("addAdminServer").value;
-    if(!nick) return alert("Введите ник");
+function renderLoginLogs(logs) {
+    const tbody = document.getElementById("loginLogsTableBody");
+    if (!tbody) return;
 
-    await db.collection("admins").doc(nick).set({
-        уровень: document.getElementById("addLevel").value,
-        статус: document.getElementById("addStatus").value,
-        вк: document.getElementById("addVk").value,
-        город: city,
-        порядок: 99
+    tbody.innerHTML = "";
+
+    if (!logs.length) {
+        tbody.innerHTML = `
+            <tr class="empty-row">
+                <td colspan="5">Нет логов входа</td>
+            </tr>
+        `;
+        return;
+    }
+
+    logs.forEach((log) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${log["имя"] || "—"}</td>
+            <td>${log["логин"] || "—"}</td>
+            <td>${log["роль"] || "—"}</td>
+            <td>${log["действие"] || "—"}</td>
+            <td>${formatDateTime(log["дата"])}</td>
+        `;
+        tbody.appendChild(row);
     });
-    alert("Администратор добавлен!");
-    loadAdmins();
-};
+}
 
-// Редактирование
-let currentEditId = "";
-document.getElementById("loadAdminBtn").onclick = async () => {
-    const nick = document.getElementById("editSearch").value.trim();
-    const doc = await db.collection("admins").doc(nick).get();
-    if(doc.exists) {
-        currentEditId = doc.id;
-        const d = doc.data();
-        document.getElementById("editNickname").value = doc.id;
-        document.getElementById("editLevel").value = d.уровень;
-        document.getElementById("editStatus").value = d.статус;
-        document.getElementById("editVk").value = d.вк;
-        document.getElementById("editAdminServer").value = d.город || "spb";
-        document.getElementById("editSortOrder").value = d.порядок || 99;
-        document.getElementById("editFields").style.display = "block";
-    } else { alert("Не найден!"); }
-};
+async function loadLoginLogs() {
+    try {
+        const snapshot = await db.collection("login_logs")
+            .orderBy("дата", "desc")
+            .limit(50)
+            .get();
 
-document.getElementById("updateAdminBtn").onclick = async () => {
-    const newNick = document.getElementById("editNickname").value.trim();
-    const data = {
-        уровень: document.getElementById("editLevel").value,
-        статус: document.getElementById("editStatus").value,
-        вк: document.getElementById("editVk").value,
-        город: document.getElementById("editAdminServer").value,
-        порядок: parseInt(document.getElementById("editSortOrder").value)
-    };
-    if(newNick !== currentEditId) await db.collection("admins").doc(currentEditId).delete();
-    await db.collection("admins").doc(newNick).set(data);
-    alert("Обновлено!");
-    loadAdmins();
-};
-
-document.getElementById("deleteAdminBtn").onclick = async () => {
-    if(confirm("Удалить?")) {
-        await db.collection("admins").doc(currentEditId).delete();
-        loadAdmins();
-        document.getElementById("editFields").style.display = "none";
+        const logs = snapshot.docs.map(doc => doc.data());
+        renderLoginLogs(logs);
+    } catch (error) {
+        console.error("Ошибка загрузки логов:", error);
+        renderLoginLogs([]);
     }
-};
+}
 
-// СТАРТ
-loadAdmins();
+async function addLoginLog(userData, action = "Вход в админ-панель") {
+    try {
+        const login = makeSafeDocId(userData["логин"] || "user");
+        const now = new Date();
+
+        const day = String(now.getDate()).padStart(2, "0");
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const year = now.getFullYear();
+        const hours = String(now.getHours()).padStart(2, "0");
+        const minutes = String(now.getMinutes()).padStart(2, "0");
+        const seconds = String(now.getSeconds()).padStart(2, "0");
+
+        const logId = `${login}_${day}-${month}-${year}_${hours}-${minutes}-${seconds}`;
+
+        await db.collection("login_logs").doc(logId).set({
+            "имя": userData["имя"] || "",
+            "логин": userData["логин"] || "",
+            "роль": userData["роль"] || "",
+            "действие": action,
+            "дата": firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        console.error("Ошибка записи лога:", error);
+    }
+}
+
+async function loadAdmins() {
+    try {
+        const snapshot = await db.collection("admins")
+            .where("город", "==", SERVER_CITY)
+            .get();
+
+        allAdmins = snapshot.docs.map(mapAdminFromDoc);
+        allAdmins = sortAdmins(allAdmins);
+        renderAdmins(allAdmins);
+    } catch (error) {
+        console.error("Ошибка загрузки:", error);
+        renderAdmins([]);
+    }
+}
+
+async function normalizeSortOrders() {
+    const snapshot = await db.collection("admins")
+        .where("город", "==", SERVER_CITY)
+        .get();
+
+    const admins = snapshot.docs.map(mapAdminFromDoc);
+    const sorted = sortAdmins(admins);
+    const batch = db.batch();
+    let changed = false;
+
+    sorted.forEach((admin, index) => {
+        const correctOrder = index + 1;
+        if (Number(admin.sortOrder) !== correctOrder) {
+            batch.update(db.collection("admins").doc(admin.id), {
+                "порядок": correctOrder
+            });
+            changed = true;
+        }
+    });
+
+    if (changed) {
+        await batch.commit();
+    }
+}
+
+async function moveAdminToPosition(adminId, targetPosition) {
+    const snapshot = await db.collection("admins")
+        .where("город", "==", SERVER_CITY)
+        .get();
+
+    let admins = snapshot.docs.map(mapAdminFromDoc);
+    admins = sortAdmins(admins);
+
+    const currentIndex = admins.findIndex((admin) => admin.id === adminId);
+    if (currentIndex === -1) return;
+
+    const movedAdmin = admins[currentIndex];
+    admins.splice(currentIndex, 1);
+
+    let newIndex = targetPosition - 1;
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > admins.length) newIndex = admins.length;
+
+    admins.splice(newIndex, 0, movedAdmin);
+
+    const batch = db.batch();
+
+    admins.forEach((admin, index) => {
+        batch.update(db.collection("admins").doc(admin.id), {
+            "порядок": index + 1
+        });
+    });
+
+    await batch.commit();
+}
+
+function updateCurrentUserInfo() {
+    const currentUserInfo = document.getElementById("currentUserInfo");
+    if (!currentUserInfo) return;
+
+    if (!currentPanelUser) {
+        currentUserInfo.textContent = "";
+        return;
+    }
+
+    currentUserInfo.textContent = `${currentPanelUser["имя"] || "Без имени"} (${currentPanelUser["логин"] || ""}) — ${currentPanelUser["роль"] || "Без роли"}`;
+}
+
+async function setLoggedInState(animated = false) {
+    const loginForm = document.getElementById("loginForm");
+    const adminControls = document.getElementById("adminControls");
+
+    hideLoginError();
+
+    if (adminPanelContent) {
+        adminPanelContent.classList.remove("login-mode");
+        adminPanelContent.classList.add("admin-mode");
+    }
+
+    updateCurrentUserInfo();
+
+    if (animated) {
+        await animateLoginSuccess();
+    } else {
+        if (loginForm) {
+            loginForm.style.display = "none";
+            loginForm.classList.remove("fade-out");
+        }
+        if (adminControls) {
+            adminControls.style.display = "block";
+            adminControls.classList.remove("fade-out");
+            adminControls.classList.add("fade-in");
+        }
+    }
+}
+
+function setLoggedOutState() {
+    const loginForm = document.getElementById("loginForm");
+    const adminControls = document.getElementById("adminControls");
+    const loginInput = document.getElementById("adminLogin");
+    const passwordInput = document.getElementById("adminPassword");
+
+    if (loginForm) {
+        loginForm.style.display = "block";
+        loginForm.classList.remove("fade-out");
+        loginForm.classList.add("fade-in");
+    }
+
+    if (adminControls) {
+        adminControls.style.display = "none";
+        adminControls.classList.remove("fade-in");
+        adminControls.classList.remove("fade-out");
+    }
+
+    if (loginInput) loginInput.value = "";
+    if (passwordInput) passwordInput.value = "";
+
+    hideLoginError();
+
+    if (adminPanelContent) {
+        adminPanelContent.classList.remove("admin-mode");
+        adminPanelContent.classList.add("login-mode");
+    }
+
+    currentPanelUser = null;
+    localStorage.removeItem(ADMIN_SESSION_KEY);
+}
+
+function filterAdmins() {
+    const value = (searchInput?.value || "").trim().toLowerCase();
+
+    if (!value) {
+        renderAdmins(sortAdmins(allAdmins));
+        return;
+    }
+
+    const filtered = allAdmins.filter((admin) =>
+        (admin.nickname || "").toLowerCase().includes(value)
+    );
+
+    renderAdmins(sortAdmins(filtered));
+}
+
+function activateTab(tabName) {
+    if (tabName === "logs") {
+        adminsTabBtn?.classList.remove("active");
+        logsTabBtn?.classList.add("active");
+        if (adminsTab) adminsTab.style.display = "none";
+        if (logsTab) logsTab.style.display = "block";
+        loadLoginLogs();
+    } else {
+        logsTabBtn?.classList.remove("active");
+        adminsTabBtn?.classList.add("active");
+        if (logsTab) logsTab.style.display = "none";
+        if (adminsTab) adminsTab.style.display = "block";
+    }
+}
+
+if (adminsTabBtn) {
+    adminsTabBtn.addEventListener("click", () => activateTab("admins"));
+}
+
+if (logsTabBtn) {
+    logsTabBtn.addEventListener("click", () => activateTab("logs"));
+}
+
+if (clearLoginLogsBtn) {
+    clearLoginLogsBtn.addEventListener("click", async () => {
+        if (!confirm("Удалить все логи входа из базы данных?")) return;
+
+        try {
+            const snapshot = await db.collection("login_logs").get();
+            const batch = db.batch();
+
+            snapshot.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+
+            await batch.commit();
+            await loadLoginLogs();
+            showMessage("Логи входа удалены из базы данных", "success");
+        } catch (error) {
+            console.error("Ошибка очистки логов:", error);
+            showMessage("Ошибка очистки логов", "error");
+        }
+    });
+}
+
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", toggleTheme);
+}
+
+if (serverBadgeBtn) {
+    serverBadgeBtn.addEventListener("click", () => {
+        showMessage("Сейчас доступен только сервер Санкт-Петербург", "success");
+    });
+}
+
+if (openAdminPanelBtn) {
+    openAdminPanelBtn.addEventListener("click", () => {
+        adminPanel.style.display = "flex";
+        animatePanelOpen();
+
+        const savedUser = localStorage.getItem(ADMIN_SESSION_KEY);
+        if (savedUser) {
+            currentPanelUser = JSON.parse(savedUser);
+            setLoggedInState(false);
+        } else {
+            setLoggedOutState();
+        }
+    });
+}
+
+if (closeAdminPanelBtn) {
+    closeAdminPanelBtn.addEventListener("click", async () => {
+        await animatePanelClose();
+    });
+}
+
+if (adminPanel) {
+    adminPanel.addEventListener("click", async (e) => {
+        if (e.target === adminPanel) {
+            await animatePanelClose();
+        }
+    });
+}
+
+if (loginBtn) {
+    loginBtn.addEventListener("click", async () => {
+        const loginInput = document.getElementById("adminLogin");
+        const passwordInput = document.getElementById("adminPassword");
+
+        const login = loginInput?.value.trim();
+        const password = passwordInput?.value.trim();
+
+        hideLoginError();
+
+        if (!login || !password) {
+            showLoginError("Введите логин и пароль");
+            return;
+        }
+
+        setLoginButtonLoading(true);
+
+        try {
+            const doc = await db.collection("panel_users").doc(login).get();
+
+            if (!doc.exists) {
+                showLoginError("Пользователь не найден");
+                setLoginButtonLoading(false);
+                return;
+            }
+
+            const userData = doc.data() || {};
+
+            if (userData["активен"] === false) {
+                showLoginError("Этот аккаунт отключён");
+                setLoginButtonLoading(false);
+                return;
+            }
+
+            if ((userData["пароль"] || "") !== password) {
+                showLoginError("Неверный пароль");
+                setLoginButtonLoading(false);
+                return;
+            }
+
+            currentPanelUser = {
+                "логин": userData["логин"] || login,
+                "имя": userData["имя"] || login,
+                "роль": userData["роль"] || "Пользователь"
+            };
+
+            localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(currentPanelUser));
+
+            await setLoggedInState(true);
+            activateTab("admins");
+            await addLoginLog(currentPanelUser, "Вход в админ-панель");
+        } catch (error) {
+            console.error("Ошибка входа:", error);
+            showLoginError("Ошибка входа");
+        } finally {
+            setLoginButtonLoading(false);
+        }
+    });
+}
+
+if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+        if (currentPanelUser) {
+            await addLoginLog(currentPanelUser, "Выход из админ-панели");
+        }
+        setLoggedOutState();
+    });
+}
+
+const adminPasswordInput = document.getElementById("adminPassword");
+if (adminPasswordInput) {
+    adminPasswordInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && loginBtn) {
+            loginBtn.click();
+        }
+    });
+}
+
+if (searchInput) {
+    searchInput.addEventListener("input", filterAdmins);
+}
+
+const addAdminBtn = document.getElementById("addAdminBtn");
+if (addAdminBtn) {
+    addAdminBtn.addEventListener("click", async () => {
+        const sortOrderInput = parseInt(document.getElementById("addSortOrder").value, 10);
+        const nickname = document.getElementById("addNickname").value.trim();
+        const level = normalizeLevel(document.getElementById("addLevel").value);
+        const status = document.getElementById("addStatus").value.trim();
+        const vk = document.getElementById("addVk").value.trim();
+
+        if (!nickname || !level || !status) {
+            showMessage("Заполните обязательные поля. Уровень должен быть от 1 до 8", "error");
+            return;
+        }
+
+        const docId = makeSafeDocId(nickname);
+
+        try {
+            const checkDoc = await db.collection("admins").doc(docId).get();
+            if (checkDoc.exists) {
+                showMessage("Администратор с таким ником уже существует", "error");
+                return;
+            }
+
+            let finalSortOrder = Number.isFinite(sortOrderInput) && sortOrderInput >= 1
+                ? sortOrderInput
+                : allAdmins.length + 1;
+
+            const currentList = sortAdmins(allAdmins);
+            if (finalSortOrder > currentList.length + 1) {
+                finalSortOrder = currentList.length + 1;
+            }
+
+            const batch = db.batch();
+
+            currentList.forEach((admin) => {
+                const currentOrder = Number(admin.sortOrder) || 999999;
+                if (currentOrder >= finalSortOrder) {
+                    batch.update(db.collection("admins").doc(admin.id), {
+                        "порядок": currentOrder + 1
+                    });
+                }
+            });
+
+            batch.set(db.collection("admins").doc(docId), {
+                "уровень": level,
+                "статус": status,
+                "вк": vk || "",
+                "город": SERVER_CITY,
+                "порядок": finalSortOrder,
+                "создан": firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            await batch.commit();
+            await normalizeSortOrders();
+            await loadAdmins();
+            filterAdmins();
+
+            document.getElementById("addSortOrder").value = "";
+            document.getElementById("addNickname").value = "";
+            document.getElementById("addLevel").value = "";
+            document.getElementById("addStatus").value = "";
+            document.getElementById("addVk").value = "";
+
+            showMessage("Администратор добавлен", "success");
+        } catch (error) {
+            console.error("Ошибка добавления:", error);
+            showMessage("Ошибка при добавлении", "error");
+        }
+    });
+}
+
+const bulkImportBtn = document.getElementById("bulkImportBtn");
+if (bulkImportBtn) {
+    bulkImportBtn.addEventListener("click", async () => {
+        const text = document.getElementById("bulkAdminText").value.trim();
+
+        if (!text) {
+            showMessage("Вставьте данные для импорта", "error");
+            return;
+        }
+
+        const lines = text
+            .split("\n")
+            .map(line => line.trim())
+            .filter(Boolean);
+
+        try {
+            const existingSnapshot = await db.collection("admins")
+                .where("город", "==", SERVER_CITY)
+                .get();
+
+            let existingAdmins = existingSnapshot.docs.map(mapAdminFromDoc);
+            existingAdmins = sortAdmins(existingAdmins);
+
+            let nextOrder = existingAdmins.length + 1;
+            let importedCount = 0;
+
+            for (const line of lines) {
+                const parts = line.split("\t").map(item => item.trim());
+
+                if (parts.length < 4) continue;
+
+                const nickname = parts[0];
+                const level = normalizeLevel(parts[1]);
+                const status = parts[2];
+                const vk = parts[3];
+
+                if (!nickname || !status || !level) continue;
+
+                const docId = makeSafeDocId(nickname);
+                const docRef = db.collection("admins").doc(docId);
+                const existingDoc = await docRef.get();
+
+                if (existingDoc.exists) {
+                    await docRef.update({
+                        "уровень": level,
+                        "статус": status,
+                        "вк": vk || "",
+                        "город": SERVER_CITY,
+                        "обновлен": firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } else {
+                    await docRef.set({
+                        "уровень": level,
+                        "статус": status,
+                        "вк": vk || "",
+                        "город": SERVER_CITY,
+                        "порядок": nextOrder,
+                        "создан": firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    nextOrder++;
+                }
+
+                importedCount++;
+            }
+
+            await normalizeSortOrders();
+            await loadAdmins();
+            filterAdmins();
+
+            document.getElementById("bulkAdminText").value = "";
+            showMessage(`Импортировано: ${importedCount}`, "success");
+        } catch (error) {
+            console.error("Ошибка импорта:", error);
+            showMessage("Ошибка импорта", "error");
+        }
+    });
+}
+
+const clearAllAdminsBtn = document.getElementById("clearAllAdminsBtn");
+if (clearAllAdminsBtn) {
+    clearAllAdminsBtn.addEventListener("click", async () => {
+        if (!confirm("Удалить всех администраторов Санкт-Петербурга?")) return;
+
+        try {
+            const snapshot = await db.collection("admins")
+                .where("город", "==", SERVER_CITY)
+                .get();
+
+            const batch = db.batch();
+            snapshot.forEach((doc) => batch.delete(doc.ref));
+            await batch.commit();
+
+            await loadAdmins();
+            filterAdmins();
+            showMessage("Список очищен", "success");
+        } catch (error) {
+            console.error("Ошибка очистки:", error);
+            showMessage("Ошибка очистки", "error");
+        }
+    });
+}
+
+const loadAdminBtn = document.getElementById("loadAdminBtn");
+if (loadAdminBtn) {
+    loadAdminBtn.addEventListener("click", async () => {
+        const nickname = document.getElementById("editNicknameSearch").value.trim();
+        const docId = makeSafeDocId(nickname);
+
+        if (!nickname) {
+            showMessage("Введите ник", "error");
+            return;
+        }
+
+        try {
+            const doc = await db.collection("admins").doc(docId).get();
+
+            if (!doc.exists) {
+                showMessage("Администратор не найден", "error");
+                return;
+            }
+
+            const admin = mapAdminFromDoc(doc);
+
+            if (admin.city !== SERVER_CITY) {
+                showMessage("Администратор не найден на этом сервере", "error");
+                return;
+            }
+
+            currentEditingAdmin = admin;
+
+            document.getElementById("editNickname").value = admin.nickname || "";
+            document.getElementById("editSortOrder").value = admin.sortOrder || "";
+            document.getElementById("editLevel").value = admin.level || "";
+            document.getElementById("editStatus").value = admin.status || "";
+            document.getElementById("editVk").value = admin.vk || "";
+            document.getElementById("editFields").style.display = "block";
+        } catch (error) {
+            console.error("Ошибка загрузки:", error);
+            showMessage("Ошибка загрузки", "error");
+        }
+    });
+}
+
+const updateAdminBtn = document.getElementById("updateAdminBtn");
+if (updateAdminBtn) {
+    updateAdminBtn.addEventListener("click", async () => {
+        if (!currentEditingAdmin) return;
+
+        const newNickname = document.getElementById("editNickname").value.trim();
+        const sortOrder = parseInt(document.getElementById("editSortOrder").value, 10);
+        const level = normalizeLevel(document.getElementById("editLevel").value);
+        const status = document.getElementById("editStatus").value.trim();
+        const vk = document.getElementById("editVk").value.trim();
+
+        if (!newNickname || !level || !status) {
+            showMessage("Заполните обязательные поля. Уровень должен быть от 1 до 8", "error");
+            return;
+        }
+
+        const newDocId = makeSafeDocId(newNickname);
+        const oldDocId = currentEditingAdmin.id;
+
+        try {
+            if (newDocId !== oldDocId) {
+                const newDocCheck = await db.collection("admins").doc(newDocId).get();
+                if (newDocCheck.exists) {
+                    showMessage("Администратор с таким ником уже существует", "error");
+                    return;
+                }
+
+                const oldDocSnapshot = await db.collection("admins").doc(oldDocId).get();
+                const oldData = oldDocSnapshot.data() || {};
+
+                await db.collection("admins").doc(newDocId).set({
+                    ...oldData,
+                    "уровень": level,
+                    "статус": status,
+                    "вк": vk || "",
+                    "город": SERVER_CITY,
+                    "обновлен": firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                await db.collection("admins").doc(oldDocId).delete();
+                currentEditingAdmin.id = newDocId;
+                currentEditingAdmin.nickname = newDocId;
+            } else {
+                await db.collection("admins").doc(oldDocId).update({
+                    "уровень": level,
+                    "статус": status,
+                    "вк": vk || "",
+                    "город": SERVER_CITY,
+                    "обновлен": firebase.firestore.FieldValue.serverTimestamp()
+                });
+            }
+
+            if (Number.isFinite(sortOrder) && sortOrder >= 1) {
+                await moveAdminToPosition(currentEditingAdmin.id, sortOrder);
+            }
+
+            await normalizeSortOrders();
+            await loadAdmins();
+            filterAdmins();
+
+            document.getElementById("editFields").style.display = "none";
+            currentEditingAdmin = null;
+
+            showMessage("Данные обновлены", "success");
+        } catch (error) {
+            console.error("Ошибка обновления:", error);
+            showMessage("Ошибка обновления", "error");
+        }
+    });
+}
+
+const deleteAdminBtn = document.getElementById("deleteAdminBtn");
+if (deleteAdminBtn) {
+    deleteAdminBtn.addEventListener("click", async () => {
+        if (!currentEditingAdmin) return;
+
+        if (!confirm(`Удалить ${currentEditingAdmin.nickname}?`)) return;
+
+        try {
+            await db.collection("admins").doc(currentEditingAdmin.id).delete();
+            await normalizeSortOrders();
+            await loadAdmins();
+            filterAdmins();
+
+            document.getElementById("editFields").style.display = "none";
+            currentEditingAdmin = null;
+
+            showMessage("Администратор удалён", "success");
+        } catch (error) {
+            console.error("Ошибка удаления:", error);
+            showMessage("Ошибка удаления", "error");
+        }
+    });
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || "light";
+    applyTheme(savedTheme);
+
+    try {
+        await normalizeSortOrders();
+    } catch (error) {
+        console.error("Ошибка нормализации порядка:", error);
+    }
+
+    await loadAdmins();
+
+    const savedUser = localStorage.getItem(ADMIN_SESSION_KEY);
+    if (savedUser && adminPanelContent) {
+        currentPanelUser = JSON.parse(savedUser);
+        adminPanelContent.classList.remove("login-mode");
+        adminPanelContent.classList.add("admin-mode");
+    }
+});
