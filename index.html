@@ -26,8 +26,8 @@
         </header>
 
         <main class="card">
-            <!-- ПЕРЕКЛЮЧАТЕЛЬ СЕРВЕРОВ НА ГЛАВНОЙ -->
-            <div class="server-tabs-main">
+            <!-- ПЕРЕКЛЮЧАТЕЛЬ СЕРВЕРОВ (КРАСИВЫЙ) -->
+            <div class="server-selection-wrap">
                 <button class="server-tab-btn active" data-server="spb">Невский</button>
                 <button class="server-tab-btn" data-server="ekb">Екатеринбург</button>
             </div>
@@ -52,7 +52,6 @@
         </main>
     </div>
 
-    <!-- Кнопка админки -->
     <button id="openAdminPanelBtn" class="admin-fab">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c0 .66.39 1.26 1 1.51.16.06.33.09.51.09H21a2 2 0 1 1 0 4h-.09c-.18 0-.35.03-.51.09-.61.25-1 .85-1 1.51Z"/></svg>
     </button>
@@ -70,7 +69,6 @@
                 <button id="closeAdminPanel" class="close-btn">&times;</button>
             </div>
 
-            <!-- ВХОД -->
             <div id="loginForm" class="login-block">
                 <label>Логин</label>
                 <input type="text" id="adminLogin" placeholder="Введите логин" />
@@ -80,10 +78,11 @@
                 <p id="loginError" class="error-message"></p>
             </div>
 
-            <!-- УПРАВЛЕНИЕ -->
             <div id="adminControls" class="admin-controls" style="display:none;">
                 <div class="admin-topbar">
-                    <div class="admin-topbar-title">Управление базой данных</div>
+                    <div>
+                        <div class="admin-topbar-title">Админ-панель активна</div>
+                    </div>
                     <button id="logoutBtn" class="secondary-btn logout-btn">Выйти</button>
                 </div>
 
@@ -92,50 +91,49 @@
                     <button id="logsTabBtn" class="admin-tab-btn">Логи входа</button>
                 </div>
 
-                <div id="adminsTab" class="admin-tab-content active">
+                <div id="adminsTab" class="admin-tab-content">
                     <div class="grid-2">
-                        <!-- Добавление -->
                         <div class="control-section">
-                            <h3>Добавить администратора</h3>
-                            <label>Выберите сервер</label>
-                            <select id="addServer">
-                                <option value="spb">Невский</option>
-                                <option value="ekb">Екатеринбург</option>
-                            </select>
-                            <input type="text" id="addNickname" placeholder="Игровой ник" />
-                            <input type="number" id="addLevel" placeholder="Уровень (1-8)" />
-                            <input type="text" id="addStatus" placeholder="Статус (Напр: ЗГА)" />
-                            <input type="text" id="addVk" placeholder="Ссылка на VK" />
-                            <button id="addAdminBtn" class="primary-btn">Добавить</button>
-                        </div>
-
-                        <!-- Массовый импорт -->
-                        <div class="control-section">
-                            <h3>Массовое добавление</h3>
+                            <h3>Массовый импорт</h3>
                             <label>Сервер для импорта</label>
-                            <select id="bulkServer">
+                            <select id="bulkServer" class="admin-select">
                                 <option value="spb">Невский</option>
                                 <option value="ekb">Екатеринбург</option>
                             </select>
-                            <textarea id="bulkAdminText" rows="6" placeholder="Ник [TAB] Уровень [TAB] Статус [TAB] VK"></textarea>
+                            <textarea id="bulkAdminText" rows="6" placeholder="Ник	Уровень	Статус	VK"></textarea>
                             <div class="button-row">
                                 <button id="bulkImportBtn" class="primary-btn">Импорт</button>
                                 <button id="clearAllAdminsBtn" class="danger-btn">Очистить сервер</button>
                             </div>
                         </div>
+
+                        <div class="control-section">
+                            <h3>Добавить одного</h3>
+                            <label>Сервер</label>
+                            <select id="addServer" class="admin-select">
+                                <option value="spb">Невский</option>
+                                <option value="ekb">Екатеринбург</option>
+                            </select>
+                            <input type="text" id="addNickname" placeholder="Игровой ник" />
+                            <input type="number" id="addLevel" placeholder="Уровень" />
+                            <input type="text" id="addStatus" placeholder="Статус" />
+                            <input type="text" id="addVk" placeholder="VK ссылка" />
+                            <button id="addAdminBtn" class="primary-btn">Добавить</button>
+                        </div>
                     </div>
 
-                    <!-- Редактирование -->
                     <div class="control-section">
-                        <h3>Редактировать данные</h3>
-                        <input type="text" id="editNicknameSearch" placeholder="Введите ник для поиска" />
-                        <button id="loadAdminBtn" class="secondary-btn">Найти в базе</button>
+                        <h3>Редактирование</h3>
+                        <div class="button-row">
+                            <input type="text" id="editNicknameSearch" placeholder="Введите ник" />
+                            <button id="loadAdminBtn" class="secondary-btn">Найти</button>
+                        </div>
 
                         <div id="editFields" style="display:none; margin-top:15px;">
                             <div class="grid-2">
                                 <div><label>Ник</label><input type="text" id="editNickname"></div>
                                 <div><label>Сервер</label>
-                                    <select id="editServer">
+                                    <select id="editServer" class="admin-select">
                                         <option value="spb">Невский</option>
                                         <option value="ekb">Екатеринбург</option>
                                     </select>
@@ -143,7 +141,7 @@
                                 <div><label>Уровень</label><input type="number" id="editLevel"></div>
                                 <div><label>Статус</label><input type="text" id="editStatus"></div>
                                 <div><label>VK</label><input type="text" id="editVk"></div>
-                                <div><label>Позиция</label><input type="number" id="editSortOrder"></div>
+                                <div><label>Порядок</label><input type="number" id="editSortOrder"></div>
                             </div>
                             <div class="button-row">
                                 <button id="updateAdminBtn" class="primary-btn">Обновить</button>
@@ -155,17 +153,9 @@
 
                 <div id="logsTab" class="admin-tab-content" style="display:none;">
                     <div class="control-section">
-                        <button id="clearLoginLogsBtn" class="danger-btn">Очистить логи входа</button>
+                        <button id="clearLoginLogsBtn" class="danger-btn">Очистить логи</button>
                         <div class="table-shell" style="margin-top:15px;">
                             <table class="admin-table">
-                                <thead>
-                                    <tr>
-                                        <th>ИМЯ</th>
-                                        <th>ЛОГИН</th>
-                                        <th>ДЕЙСТВИЕ</th>
-                                        <th>ДАТА</th>
-                                    </tr>
-                                </thead>
                                 <tbody id="loginLogsTableBody"></tbody>
                             </table>
                         </div>
